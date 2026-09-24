@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-6">
+
+    <div>
+        <h1 class="text-2xl font-bold text-gray-800">Settings</h1>
+        <p class="text-sm text-gray-400 mt-0.5">Manage your profile, preferences, and data.</p>
+    </div>
+
+    {% if msg %}
+    <div class="bg-green-50 text-green-700 p-4 rounded-xl text-sm border border-green-100 flex items-center gap-2">
+        <i class="ph-fill ph-check-circle"></i>
+        {{ msg }}
+    </div>
+    {% endif %}
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        
+        <!-- Profile -->
+        <div class="card">
+            <h3 class="font-bold text-gray-800 mb-4 flex items-center gap-2">
+                <i class="ph-fill ph-user text-[#9B72AF]"></i> Profile
+            </h3>
+            <form action="{{ url_for('settings') }}" method="POST" class="space-y-4">
+                <input type="hidden" name="action" value="update_profile">
+                <div>
+                    <label class="block text-sm font-medium text-gray-600 mb-1">Username</label>
+                    <input type="text" name="username" value="{{ user_info.username }}" required
+                           class="block w-full py-2.5 px-3 bg-[#FDFCFF] border border-[#CDB4DB]/40 rounded-xl text-sm outline-none focus:border-[#CDB4DB]">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-600 mb-1">Email Address <span class="text-gray-400 font-normal text-xs">(for password recovery)</span></label>
+                    <input type="email" name="email" value="{{ user_info.email or '' }}"
+                           class="block w-full py-2.5 px-3 bg-[#FDFCFF] border border-[#CDB4DB]/40 rounded-xl text-sm outline-none focus:border-[#CDB4DB]"
+                           placeholder="you@example.com">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-600 mb-1">New Password <span class="text-gray-400 font-normal text-xs">(leave blank to keep)</span></label>
+                    <input type="password" name="password" placeholder="••••••••"
+                           class="block w-full py-2.5 px-3 bg-[#FDFCFF] border border-[#CDB4DB]/40 rounded-xl text-sm outline-none focus:border-[#CDB4DB]">
+                </div>
+                <button type="submit" class="btn-primary w-full py-2 rounded-xl text-sm">Update Profile</button>
+            </form>
+        </div>
+
+        <!-- Preferences -->
+        <div class="card">
+            <h3 class="font-bold text-gray-800 mb-4 flex items-center gap-2">
+                <i class="ph-fill ph-sliders text-[#9B72AF]"></i> Preferences
+            </h3>
+            <form action="{{ url_for('settings') }}" method="POST" class="space-y-4">
+                <input type="hidden" name="action" value="save_preferences">
+                <div>
+                    <label class="block text-sm font-medium text-gray-600 mb-1">Currency Symbol</label>
+                    <select name="currency" class="block w-full py-2.5 px-3 bg-[#FDFCFF] border border-[#CDB4DB]/40 rounded-xl text-sm outline-none focus:border-[#CDB4DB]">
+                        <option value="₹" {% if currency == '₹' %}selected{% endif %}>₹ (INR)</option>
+                        <option value="$" {% if currency == '$' %}selected{% endif %}>$ (USD)</option>
+                        <option value="€" {% if currency == '€' %}selected{% endif %}>€ (EUR)</option>
+                        <option value="£" {% if currency == '£' %}selected{% endif %}>£ (GBP)</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn-primary w-full py-2 rounded-xl text-sm">Save Preferences</button>
+            </form>
+        </div>
+
+        <!-- Custom Categories -->
+        <div class="card md:col-span-2">
+            <h3 class="font-bold text-gray-800 mb-4 flex items-center gap-2">
+                <i class="ph-fill ph-tag text-[#9B72AF]"></i> Custom Categories
+            </h3>
+            
+            <form action="{{ url_for('settings') }}" method="POST" class="flex gap-2 mb-6">
+                <input type="hidden" name="action" value="add_category">
+                <input type="text" name="name" placeholder="New category name" required
+                       class="block flex-1 py-2 px-3 bg-[#FDFCFF] border border-[#CDB4DB]/40 rounded-xl text-sm outline-none focus:border-[#CDB4DB]">
+                <select name="type" required class="block w-32 py-2 px-3 bg-[#FDFCFF] border border-[#CDB4DB]/40 rounded-xl text-sm outline-none focus:border-[#CDB4DB]">
+                    <option value="expense">Expense</option>
+                    <option value="income">Income</option>
+                </select>
+                <button type="submit" class="btn-primary px-4 py-2 rounded-xl text-sm">Add</button>
+            </form>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <h4 class="text-sm font-semibold text-gray-600 mb-2">Expense Categories</h4>
+                    <div class="space-y-2">
+                        {% for cat in expense_cats %}
+                        <div class="flex justify-between items-center bg-[#FDFCFF] border border-[#CDB4DB]/20 px-3 py-2 rounded-lg">
+                            <span class="text-sm text-gray-700">{{ cat.name }}</span>
+                            <form action="{{ url_for('settings') }}" method="POST" onsubmit="return confirm('Delete this category?');">
+                                <input type="hidden" name="action" value="delete_category">
+                                <input type="hidden" name="category_id" value="{{ cat.id }}">
+                                <button type="submit" class="text-red-400 hover:text-red-600"><i class="ph ph-trash"></i></button>
+                            </form>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                <div>
+                    <h4 class="text-sm font-semibold text-gray-600 mb-2">Income Categories</h4>
+                    <div class="space-y-2">
+                        {% for cat in income_cats %}
+                        <div class="flex justify-between items-center bg-[#FDFCFF] border border-[#CDB4DB]/20 px-3 py-2 rounded-lg">
+                            <span class="text-sm text-gray-700">{{ cat.name }}</span>
+                            <form action="{{ url_for('settings') }}" method="POST" onsubmit="return confirm('Delete this category?');">
+                                <input type="hidden" name="action" value="delete_category">
+                                <input type="hidden" name="category_id" value="{{ cat.id }}">
+                                <button type="submit" class="text-red-400 hover:text-red-600"><i class="ph ph-trash"></i></button>
+                            </form>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Data Management -->
+        <div class="card md:col-span-2">
+            <h3 class="font-bold text-gray-800 mb-4 flex items-center gap-2">
+                <i class="ph-fill ph-database text-[#9B72AF]"></i> Data Management
+            </h3>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="border border-[#CDB4DB]/30 rounded-xl p-4">
+                    <h4 class="font-semibold text-gray-700 mb-1">Export Backup</h4>
+                    <p class="text-xs text-gray-500 mb-3">Download all your data as a JSON file.</p>
+                    <a href="{{ url_for('export_json') }}" class="btn-primary inline-block text-center w-full py-2 rounded-xl text-sm">Download JSON Backup</a>
+                </div>
+
+                <div class="border border-[#CDB4DB]/30 rounded-xl p-4">
+                    <h4 class="font-semibold text-gray-700 mb-1">Import Backup</h4>
+                    <p class="text-xs text-gray-500 mb-3">Restore transactions from a JSON backup.</p>
+                    <form action="{{ url_for('settings') }}" method="POST" enctype="multipart/form-data" class="flex gap-2">
+                        <input type="hidden" name="action" value="import_json">
+                        <input type="file" name="import_file" accept=".json" required
+                               class="block w-full text-xs text-gray-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-[#FDFCFF] file:text-[#9B72AF] hover:file:bg-[#FFC8DD]/20">
+                        <button type="submit" class="btn-primary px-3 py-1.5 rounded-lg text-xs whitespace-nowrap">Import</button>
+                    </form>
+                </div>
+            </div>
+
+            <div class="mt-6 border border-red-100 bg-red-50/50 rounded-xl p-4">
+                <h4 class="font-semibold text-red-700 mb-1">Danger Zone</h4>
+                <p class="text-xs text-red-500 mb-3">Permanently delete all your transactions, budgets, goals, and loans. This cannot be undone.</p>
+                <form action="{{ url_for('settings') }}" method="POST" onsubmit="return confirm('Are you absolutely sure? All data will be wiped out.');">
+                    <input type="hidden" name="action" value="clear_all">
+                    <button type="submit" class="bg-red-100 text-red-700 hover:bg-red-200 font-semibold py-2 px-4 rounded-xl text-sm transition">
+                        Wipe All Data
+                    </button>
+                </form>
+            </div>
+        </div>
+
+    </div>
+</div>
+{% endblock %}

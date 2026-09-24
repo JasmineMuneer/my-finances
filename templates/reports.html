@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-6">
+
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-800">Monthly Report</h1>
+            <p class="text-sm text-gray-400 mt-0.5">A complete summary of your financial month.</p>
+        </div>
+        <div class="flex gap-2 items-center">
+            <form method="GET">
+                <input type="month" name="month" value="{{ current_month }}" onchange="this.form.submit()"
+                       class="border border-[#CDB4DB]/40 rounded-xl py-2 px-3 bg-[#FDFCFF] text-sm outline-none">
+            </form>
+            <a href="{{ url_for('export_csv') }}"
+               class="px-4 py-2 rounded-xl font-medium text-sm transition flex items-center gap-2 hover:opacity-80"
+               style="background:rgba(205,180,219,0.18);color:#9B72AF;">
+                <i class="ph ph-download"></i> Export CSV
+            </a>
+        </div>
+    </div>
+
+    <!-- Financial Summary -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="card text-center" style="border: 1px solid rgba(205,180,219,0.25);">
+            <p class="text-xs text-gray-500 uppercase tracking-wider font-medium mb-2">Income</p>
+            <p class="text-xl font-bold" style="color: #2d8a4e;">{{ currency }}{{ "{:,.0f}".format(income) }}</p>
+        </div>
+        <div class="card text-center" style="border: 1px solid rgba(205,180,219,0.25);">
+            <p class="text-xs text-gray-500 uppercase tracking-wider font-medium mb-2">Expenses</p>
+            <p class="text-xl font-bold" style="color: #c0445e;">{{ currency }}{{ "{:,.0f}".format(expenses) }}</p>
+        </div>
+        <div class="card text-center" style="border: 1px solid rgba(205,180,219,0.25);">
+            <p class="text-xs text-gray-500 uppercase tracking-wider font-medium mb-2">Savings</p>
+            <p class="text-xl font-bold" style="color: {% if savings >= 0 %}#2d8a4e{% else %}#c0445e{% endif %};">{{ currency }}{{ "{:,.0f}".format(savings) }}</p>
+        </div>
+        <div class="card text-center" style="border: 1px solid rgba(205,180,219,0.25);">
+            <p class="text-xs text-gray-500 uppercase tracking-wider font-medium mb-2">Savings Rate</p>
+            <p class="text-xl font-bold" style="color: #9B72AF;">{{ savings_rate|round(1) }}%</p>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+        <!-- Top Spending Categories -->
+        <div class="card">
+            <h3 class="font-semibold text-gray-800 mb-4">Where Did My Money Go?</h3>
+            {% if top_categories %}
+            <div class="space-y-3">
+                {% for cat in top_categories %}
+                <div class="flex justify-between items-center">
+                    <div class="flex items-center gap-3">
+                        <div class="w-3 h-3 rounded-full" style="background: #CDB4DB; opacity: {{ loop.index * 0.2 if loop.index * 0.2 <= 1 else 1 }};"></div>
+                        <span class="text-sm font-medium text-gray-700">{{ cat.category }}</span>
+                    </div>
+                    <div class="text-right">
+                        <span class="font-bold text-gray-800">{{ currency }}{{ "{:,.0f}".format(cat.total) }}</span>
+                        <span class="text-xs text-gray-400 ml-1">({{ (cat.total/expenses*100)|round(0)|int if expenses > 0 else 0 }}%)</span>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-sm text-gray-400 text-center py-6">No expenses recorded this month.</p>
+            {% endif %}
+        </div>
+
+        <!-- Budget Performance -->
+        <div class="card">
+            <h3 class="font-semibold text-gray-800 mb-4">Budget Performance</h3>
+            {% if budget_data %}
+            <div class="space-y-3">
+                {% for b in budget_data %}
+                <div>
+                    <div class="flex justify-between text-sm mb-1">
+                        <span class="font-medium text-gray-700">{{ b.category }}</span>
+                        <span style="color: {% if b.over %}#c0445e{% else %}#4b5563{% endif %};" class="font-semibold">
+                            {{ currency }}{{ "{:,.0f}".format(b.spent) }} / {{ currency }}{{ "{:,.0f}".format(b.budget) }}
+                        </span>
+                    </div>
+                    <div class="w-full rounded-full h-1.5" style="background: rgba(205,180,219,0.2);">
+                        <div class="h-1.5 rounded-full"
+                             style="width: {{ [b.spent/b.budget*100, 100]|min if b.budget > 0 else 0 }}%;
+                                    background: {% if b.over %}#F87171{% else %}linear-gradient(90deg,#CDB4DB,#A2D2FF){% endif %};"></div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-sm text-gray-400 text-center py-6">No budgets set for this month.</p>
+            {% endif %}
+        </div>
+
+        <!-- Goals -->
+        <div class="card">
+            <h3 class="font-semibold text-gray-800 mb-4">Savings Goals</h3>
+            {% if goals %}
+            <div class="space-y-3">
+                {% for g in goals %}
+                {% set pct = (g.current_amount / g.target_amount * 100) if g.target_amount > 0 else 0 %}
+                <div>
+                    <div class="flex justify-between text-sm mb-1">
+                        <span class="font-medium text-gray-700">{{ g.name }}</span>
+                        <span class="text-gray-600">{{ pct|round(0)|int }}%</span>
+                    </div>
+                    <div class="w-full rounded-full h-1.5" style="background: rgba(205,180,219,0.2);">
+                        <div class="h-1.5 rounded-full" style="width: {{ [pct, 100]|min }}%; background: linear-gradient(90deg,#CDB4DB,#A2D2FF);"></div>
+                    </div>
+                    <p class="text-xs text-gray-400 mt-0.5">{{ currency }}{{ "{:,.0f}".format(g.current_amount) }} of {{ currency }}{{ "{:,.0f}".format(g.target_amount) }}</p>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-sm text-gray-400 text-center py-6">No savings goals created.</p>
+            {% endif %}
+        </div>
+
+        <!-- Loans/EMIs -->
+        <div class="card">
+            <h3 class="font-semibold text-gray-800 mb-4">Active Loans</h3>
+            {% if loans %}
+            <div class="space-y-3">
+                {% for loan in loans %}
+                <div class="flex justify-between items-center border-b border-[#CDB4DB]/15 pb-2 last:border-0">
+                    <div>
+                        <p class="text-sm font-medium text-gray-800">{{ loan.name }}</p>
+                        <p class="text-xs text-gray-400">{{ loan.remaining_installments }} of {{ loan.total_installments }} EMIs left</p>
+                    </div>
+                    <span class="font-bold text-gray-800">{{ currency }}{{ "{:,.0f}".format(loan.monthly_emi) }}/mo</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-sm text-gray-400 text-center py-6">No loans tracked.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <p class="text-xs text-gray-400 text-center">
+        This report reflects data entered manually in My Finances for the period {{ current_month }}.
+    </p>
+
+</div>
+{% endblock %}

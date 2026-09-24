@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Finances - Understand your money. Plan your future.</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        /* Pastel palette */
+                        lavender:   '#CDB4DB',
+                        ppink:      '#FFC8DD',
+                        spink:      '#FFAFCC',
+                        babyblue:   '#BDE0FE',
+                        skyblue:    '#A2D2FF',
+
+                        /* Semantic aliases used throughout templates */
+                        primary:    '#CDB4DB',   /* Lavender  — nav active, accents */
+                        secondary:  '#A2D2FF',   /* Sky Blue  — analytics, progress */
+                        accent:     '#FFAFCC',   /* Soft Pink — primary action buttons */
+
+                        /* Status colours — soft but meaningful */
+                        success:    '#4ADE80',   /* soft green  */
+                        warning:    '#FBBF24',   /* amber       */
+                        danger:     '#F87171',   /* soft red    */
+
+                        /* App background */
+                        background: '#FDFCFF',
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- Alpine.js -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Phosphor Icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #FDFCFF;
+            color: #2D2D3A;
+        }
+        .card {
+            background-color: white;
+            border-radius: 1.25rem;
+            box-shadow: 0 2px 12px rgba(205, 180, 219, 0.12), 0 1px 4px rgba(205, 180, 219, 0.08);
+            border: 1px solid rgba(205, 180, 219, 0.18);
+            padding: 1.5rem;
+        }
+        /* Sidebar active link */
+        .nav-active {
+            background-color: rgba(205, 180, 219, 0.18);
+            color: #9B72AF;
+            font-weight: 600;
+        }
+        /* Pastel button — main action */
+        .btn-primary {
+            background-color: #FFAFCC;
+            color: #5a2d3d;
+            font-weight: 600;
+            transition: background-color 0.15s ease, box-shadow 0.15s ease;
+        }
+        .btn-primary:hover {
+            background-color: #ff95bc;
+            box-shadow: 0 4px 14px rgba(255, 175, 204, 0.45);
+        }
+        /* Pastel secondary button */
+        .btn-secondary {
+            background-color: rgba(205, 180, 219, 0.2);
+            color: #6b4f7a;
+            font-weight: 600;
+            transition: background-color 0.15s ease;
+        }
+        .btn-secondary:hover {
+            background-color: rgba(205, 180, 219, 0.35);
+        }
+        /* Hide scrollbar */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        /* Subtle pastel focus ring */
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #CDB4DB !important;
+            box-shadow: 0 0 0 3px rgba(205, 180, 219, 0.25);
+        }
+    </style>
+</head>
+<body class="antialiased flex h-screen overflow-hidden" x-data="{ sidebarOpen: false, addTransactionOpen: false }">
+
+    <!-- Mobile sidebar backdrop -->
+    <div x-show="sidebarOpen" @click="sidebarOpen = false" class="fixed inset-0 z-20 bg-black/30 backdrop-blur-sm lg:hidden" x-transition.opacity></div>
+
+    <!-- Sidebar -->
+    <aside :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full'"
+           class="fixed inset-y-0 left-0 z-30 w-64 bg-white border-r border-[#CDB4DB]/20 shadow-[4px_0_24px_rgba(205,180,219,0.12)] transition-transform duration-300 lg:static lg:translate-x-0 flex flex-col">
+
+        <!-- Logo -->
+        <div class="flex items-center justify-between px-6 py-5">
+            <div class="flex items-center gap-2 font-bold text-xl" style="color: #9B72AF;">
+                <i class="ph-fill ph-wallet"></i>
+                <span>My Finances</span>
+            </div>
+            <button @click="sidebarOpen = false" class="lg:hidden text-gray-400 hover:text-gray-600">
+                <i class="ph ph-x text-xl"></i>
+            </button>
+        </div>
+
+        <!-- Nav -->
+        <nav class="flex-1 px-3 space-y-0.5 overflow-y-auto no-scrollbar pb-24 lg:pb-4">
+
+            <a href="{{ url_for('dashboard') }}"
+               class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm transition
+                      {% if request.endpoint == 'dashboard' %}nav-active{% else %}text-gray-500 hover:bg-[#FFC8DD]/20 hover:text-[#9B72AF]{% endif %}">
+                <i class="ph ph-squares-four text-lg"></i> Dashboard
+            </a>
+            <a href="{{ url_for('transactions') }}"
+               class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm transition
+                      {% if request.endpoint == 'transactions' %}nav-active{% else %}text-gray-500 hover:bg-[#FFC8DD]/20 hover:text-[#9B72AF]{% endif %}">
+                <i class="ph ph-list-dashes text-lg"></i> Transactions
+            </a>
+            <a href="{{ url_for('daily') }}"
+               class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm transition
+                      {% if request.endpoint == 'daily' %}nav-active{% else %}text-gray-500 hover:bg-[#FFC8DD]/20 hover:text-[#9B72AF]{% endif %}">
+                <i class="ph ph-calendar-blank text-lg"></i> Daily View
+            </a>
+            <a href="{{ url_for('analytics') }}"
+               class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm transition
+                      {% if request.endpoint == 'analytics' %}nav-active{% else %}text-gray-500 hover:bg-[#FFC8DD]/20 hover:text-[#9B72AF]{% endif %}">
+                <i class="ph ph-chart-line-up text-lg"></i> Analytics
+            </a>
+            <a href="{{ url_for('budgets') }}"
+               class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm transition
+                      {% if request.endpoint == 'budgets' %}nav-active{% else %}text-gray-500 hover:bg-[#FFC8DD]/20 hover:text-[#9B72AF]{% endif %}">
+                <i class="ph ph-target text-lg"></i> Budgets
+            </a>
+
+            <div class="pt-4 mt-2 border-t border-[#CDB4DB]/20">
+                <p class="px-4 text-[10px] font-semibold text-[#CDB4DB] uppercase tracking-widest mb-1.5">Planning</p>
+                <a href="{{ url_for('goals') }}"
+                   class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm transition
+                          {% if request.endpoint == 'goals' %}nav-active{% else %}text-gray-500 hover:bg-[#FFC8DD]/20 hover:text-[#9B72AF]{% endif %}">
+                    <i class="ph ph-piggy-bank text-lg"></i> Goals
+                </a>
+                <a href="{{ url_for('loans') }}"
+                   class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm transition
+                          {% if request.endpoint == 'loans' %}nav-active{% else %}text-gray-500 hover:bg-[#FFC8DD]/20 hover:text-[#9B72AF]{% endif %}">
+                    <i class="ph ph-bank text-lg"></i> EMIs &amp; Loans
+                </a>
+                <a href="{{ url_for('bills') }}"
+                   class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm transition
+                          {% if request.endpoint == 'bills' %}nav-active{% else %}text-gray-500 hover:bg-[#FFC8DD]/20 hover:text-[#9B72AF]{% endif %}">
+                    <i class="ph ph-calendar-check text-lg"></i> Bills &amp; Subs
+                </a>
+            </div>
+
+            <div class="pt-4 mt-2 border-t border-[#CDB4DB]/20">
+                <p class="px-4 text-[10px] font-semibold text-[#CDB4DB] uppercase tracking-widest mb-1.5">Insights</p>
+                <a href="{{ url_for('comparison') }}"
+                   class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm transition
+                          {% if request.endpoint == 'comparison' %}nav-active{% else %}text-gray-500 hover:bg-[#FFC8DD]/20 hover:text-[#9B72AF]{% endif %}">
+                    <i class="ph ph-arrows-left-right text-lg"></i> What Changed?
+                </a>
+                <a href="{{ url_for('score') }}"
+                   class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm transition
+                          {% if request.endpoint == 'score' %}nav-active{% else %}text-gray-500 hover:bg-[#FFC8DD]/20 hover:text-[#9B72AF]{% endif %}">
+                    <i class="ph ph-medal text-lg"></i> Money Score
+                </a>
+                <a href="{{ url_for('net_worth') }}"
+                   class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm transition
+                          {% if request.endpoint == 'net_worth' %}nav-active{% else %}text-gray-500 hover:bg-[#FFC8DD]/20 hover:text-[#9B72AF]{% endif %}">
+                    <i class="ph ph-scales text-lg"></i> Net Worth
+                </a>
+                <a href="{{ url_for('affordability') }}"
+                   class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm transition
+                          {% if request.endpoint == 'affordability' %}nav-active{% else %}text-gray-500 hover:bg-[#FFC8DD]/20 hover:text-[#9B72AF]{% endif %}">
+                    <i class="ph ph-question text-lg"></i> Can I Afford This?
+                </a>
+            </div>
+
+            <div class="pt-4 mt-2 border-t border-[#CDB4DB]/20">
+                <p class="px-4 text-[10px] font-semibold text-[#CDB4DB] uppercase tracking-widest mb-1.5">More</p>
+                <a href="{{ url_for('reports') }}"
+                   class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm transition
+                          {% if request.endpoint == 'reports' %}nav-active{% else %}text-gray-500 hover:bg-[#FFC8DD]/20 hover:text-[#9B72AF]{% endif %}">
+                    <i class="ph ph-file-text text-lg"></i> Reports
+                </a>
+                <a href="{{ url_for('export_csv') }}"
+                   class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm text-gray-500 hover:bg-[#FFC8DD]/20 hover:text-[#9B72AF] transition">
+                    <i class="ph ph-download text-lg"></i> Export CSV
+                </a>
+                <a href="{{ url_for('settings') }}"
+                   class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm transition
+                          {% if request.endpoint == 'settings' %}nav-active{% else %}text-gray-500 hover:bg-[#FFC8DD]/20 hover:text-[#9B72AF]{% endif %}">
+                    <i class="ph ph-gear text-lg"></i> Settings
+                </a>
+                {% if session.get('user_id') %}
+                <a href="{{ url_for('logout') }}"
+                   class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm transition text-gray-500 hover:bg-red-50 hover:text-red-500">
+                    <i class="ph ph-sign-out text-lg"></i> Logout
+                </a>
+                {% endif %}
+            </div>
+        </nav>
+
+        <!-- User profile and Add Transaction button (desktop) -->
+        <div class="p-4 hidden lg:block border-t border-[#CDB4DB]/20">
+            {% if session.get('user_id') %}
+            <div class="flex items-center gap-2 mb-3 px-2 text-sm text-[#9B72AF] font-medium">
+                <i class="ph-fill ph-user-circle text-2xl"></i>
+                <span>{{ session.get('username') }}</span>
+            </div>
+            {% endif %}
+            <button @click="addTransactionOpen = true"
+                    class="btn-primary w-full rounded-xl py-3 flex items-center justify-center gap-2 text-sm shadow-md">
+                <i class="ph ph-plus-circle text-lg"></i> Add Transaction
+            </button>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="flex-1 flex flex-col h-screen overflow-hidden">
+        <!-- Mobile top header -->
+        <header class="bg-white border-b border-[#CDB4DB]/20 lg:hidden flex items-center justify-between p-4 z-10">
+            <div class="flex items-center gap-2 font-bold text-lg" style="color: #9B72AF;">
+                <i class="ph-fill ph-wallet"></i>
+                <span>My Finances</span>
+            </div>
+            <button @click="sidebarOpen = true" class="text-gray-500">
+                <i class="ph ph-list text-2xl"></i>
+            </button>
+        </header>
+
+        <!-- Page Content -->
+        <div class="flex-1 overflow-y-auto p-4 lg:p-8 no-scrollbar pb-24 lg:pb-8">
+            {% block content %}{% endblock %}
+        </div>
+    </main>
+
+    <!-- Mobile Bottom Navigation -->
+    <div class="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-[#CDB4DB]/25 flex justify-around p-2 pb-safe z-20"
+         style="box-shadow: 0 -4px 20px rgba(205,180,219,0.18);">
+        <a href="{{ url_for('dashboard') }}"
+           class="flex flex-col items-center p-2 {% if request.endpoint == 'dashboard' %}text-[#9B72AF]{% else %}text-gray-400{% endif %}">
+            <i class="ph ph-squares-four text-2xl"></i>
+            <span class="text-[10px] font-medium mt-0.5">Home</span>
+        </a>
+        <a href="{{ url_for('transactions') }}"
+           class="flex flex-col items-center p-2 {% if request.endpoint == 'transactions' %}text-[#9B72AF]{% else %}text-gray-400{% endif %}">
+            <i class="ph ph-list-dashes text-2xl"></i>
+            <span class="text-[10px] font-medium mt-0.5">Activity</span>
+        </a>
+
+        <!-- FAB -->
+        <div class="relative -top-4">
+            <button @click="addTransactionOpen = true"
+                    class="btn-primary rounded-full p-4 shadow-lg flex items-center justify-center border-4 border-[#FDFCFF]">
+                <i class="ph ph-plus text-2xl"></i>
+            </button>
+        </div>
+
+        <a href="{{ url_for('analytics') }}"
+           class="flex flex-col items-center p-2 {% if request.endpoint == 'analytics' %}text-[#9B72AF]{% else %}text-gray-400{% endif %}">
+            <i class="ph ph-chart-line-up text-2xl"></i>
+            <span class="text-[10px] font-medium mt-0.5">Stats</span>
+        </a>
+        <a href="{{ url_for('budgets') }}"
+           class="flex flex-col items-center p-2 {% if request.endpoint == 'budgets' %}text-[#9B72AF]{% else %}text-gray-400{% endif %}">
+            <i class="ph ph-target text-2xl"></i>
+            <span class="text-[10px] font-medium mt-0.5">Budget</span>
+        </a>
+    </div>
+
+    <!-- Add Transaction Modal -->
+    <div x-show="addTransactionOpen" class="fixed inset-0 z-50 overflow-y-auto" style="display: none;">
+        <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            <div x-show="addTransactionOpen" x-transition.opacity
+                 class="fixed inset-0 bg-black/25 backdrop-blur-sm transition-opacity"
+                 @click="addTransactionOpen = false"></div>
+            <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
+
+            <div x-show="addTransactionOpen"
+                 x-transition:enter="ease-out duration-300"
+                 x-transition:enter-start="opacity-0 translate-y-4 sm:scale-95"
+                 x-transition:enter-end="opacity-100 translate-y-0 sm:scale-100"
+                 x-transition:leave="ease-in duration-200"
+                 x-transition:leave-start="opacity-100 translate-y-0 sm:scale-100"
+                 x-transition:leave-end="opacity-0 translate-y-4 sm:scale-95"
+                 class="inline-block align-bottom bg-white rounded-2xl text-left overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg w-full"
+                 style="border: 1px solid rgba(205,180,219,0.3);">
+
+                <form action="{{ url_for('add_transaction') }}" method="POST">
+                    <div class="bg-white px-6 pt-6 pb-4">
+                        <div class="flex justify-between items-center mb-5">
+                            <h3 class="text-xl font-semibold text-gray-800">New Transaction</h3>
+                            <button type="button" @click="addTransactionOpen = false"
+                                    class="text-gray-400 hover:text-gray-600 transition">
+                                <i class="ph ph-x text-xl"></i>
+                            </button>
+                        </div>
+
+                        <div class="space-y-4" x-data="{ type: 'expense' }">
+
+                            <!-- Type Toggle -->
+                            <div class="flex p-1 rounded-xl" style="background: rgba(205,180,219,0.12);">
+                                <button type="button" @click="type = 'expense'"
+                                        :class="type === 'expense' ? 'bg-white shadow-sm text-[#c0445e] font-semibold' : 'text-gray-400'"
+                                        class="flex-1 py-2 rounded-lg text-sm transition">Expense</button>
+                                <button type="button" @click="type = 'income'"
+                                        :class="type === 'income' ? 'bg-white shadow-sm text-[#2d8a4e] font-semibold' : 'text-gray-400'"
+                                        class="flex-1 py-2 rounded-lg text-sm transition">Income</button>
+                                <input type="hidden" name="type" x-model="type">
+                            </div>
+
+                            <!-- Amount -->
+                            <div>
+                                <label class="block text-sm font-medium text-gray-600 mb-1">Amount</label>
+                                <div class="relative">
+                                    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                        <span class="text-gray-400 text-lg">{{ currency }}</span>
+                                    </div>
+                                    <input type="number" step="0.01" name="amount" required
+                                           class="block w-full pl-10 pr-4 py-3 bg-[#FDFCFF] border border-[#CDB4DB]/40 rounded-xl text-xl font-semibold text-gray-800"
+                                           placeholder="0.00">
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-3">
+                                <!-- Category -->
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-600 mb-1">Category</label>
+                                    <template x-if="type === 'expense'">
+                                        <select name="category" required
+                                                class="block w-full py-3 px-3 bg-[#FDFCFF] border border-[#CDB4DB]/40 rounded-xl text-sm text-gray-700">
+                                            {% for cat in expense_categories %}
+                                            <option value="{{ cat }}">{{ cat }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </template>
+                                    <template x-if="type === 'income'">
+                                        <select name="category" required
+                                                class="block w-full py-3 px-3 bg-[#FDFCFF] border border-[#CDB4DB]/40 rounded-xl text-sm text-gray-700">
+                                            {% for cat in income_categories %}
+                                            <option value="{{ cat }}">{{ cat }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </template>
+                                </div>
+
+                                <!-- Date -->
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-600 mb-1">Date</label>
+                                    <input type="date" name="date" required
+                                           x-init="$el.value = new Date().toISOString().split('T')[0]"
+                                           class="block w-full py-3 px-3 bg-[#FDFCFF] border border-[#CDB4DB]/40 rounded-xl text-sm text-gray-700">
+                                </div>
+                            </div>
+
+                            <!-- Description -->
+                            <div>
+                                <label class="block text-sm font-medium text-gray-600 mb-1">Description</label>
+                                <input type="text" name="description"
+                                       class="block w-full py-3 px-3 bg-[#FDFCFF] border border-[#CDB4DB]/40 rounded-xl text-sm text-gray-700"
+                                       placeholder="e.g. Zomato, Amazon, Salary">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="px-6 py-4 flex gap-3 border-t border-[#CDB4DB]/15" style="background: rgba(253,252,255,0.8);">
+                        <button type="submit"
+                                class="btn-primary flex-1 rounded-xl py-3 text-sm">
+                            Save Transaction
+                        </button>
+                        <button type="button" @click="addTransactionOpen = false"
+                                class="btn-secondary flex-1 rounded-xl py-3 text-sm">
+                            Cancel
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+</body>
+</html>

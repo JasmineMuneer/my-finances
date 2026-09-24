@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-6">
+
+    <div>
+        <h1 class="text-2xl font-bold text-gray-800">Money Score</h1>
+        <p class="text-sm text-gray-400 mt-0.5">A personal indicator of your financial health.</p>
+    </div>
+
+    <!-- Hero Score Card -->
+    <div class="card text-center py-10 relative overflow-hidden"
+         style="background: linear-gradient(135deg, rgba(205,180,219,0.1) 0%, rgba(255,200,221,0.1) 100%); border: 1px solid rgba(205,180,219,0.3);">
+
+        <div class="absolute inset-0 pointer-events-none" style="
+            background: radial-gradient(circle at 50% 0%,
+                {% if score >= 950 %}rgba(74,222,128,0.08)
+                {% elif score > 750 %}rgba(205,180,219,0.12)
+                {% elif score > 500 %}rgba(251,191,36,0.08)
+                {% else %}rgba(248,113,113,0.08){% endif %} 0%, transparent 65%);"></div>
+
+        <p class="text-xs font-bold uppercase tracking-widest text-gray-400 mb-3 relative z-10">Your Current Score</p>
+
+        <div class="relative z-10 inline-block">
+            <span class="text-7xl font-black"
+                  style="color: {% if score >= 950 %}#2d8a4e{% elif score > 750 %}#9B72AF{% elif score > 500 %}#b45309{% else %}#c0445e{% endif %};">
+                {{ score }}
+            </span>
+            <span class="text-2xl font-light text-gray-400"> / 1000</span>
+        </div>
+
+        <!-- Gauge bar -->
+        <div class="mt-6 mx-auto max-w-sm relative z-10">
+            <div class="w-full rounded-full h-3 overflow-hidden" style="background: rgba(205,180,219,0.2);">
+                <div class="h-3 rounded-full transition-all duration-700"
+                     style="width: {{ score / 10 }}%;
+                            background: linear-gradient(90deg,
+                                {% if score >= 950 %}#4ADE80, #22c55e
+                                {% elif score > 750 %}#CDB4DB, #A2D2FF
+                                {% elif score > 500 %}#FBBF24, #fb923c
+                                {% else %}#FFAFCC, #f87171{% endif %});"></div>
+            </div>
+        </div>
+
+        <div class="mt-6 max-w-md mx-auto px-4 py-3 rounded-xl relative z-10 text-sm font-medium text-gray-600"
+             style="background: rgba(255,255,255,0.7); border: 1px solid rgba(205,180,219,0.25);">
+            {{ insight }}
+        </div>
+    </div>
+
+    <!-- Component Breakdown -->
+    <p class="text-xs font-bold text-gray-400 uppercase tracking-widest text-center">Score Breakdown</p>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+        <div class="card" style="border-left: 3px solid #FFC8DD;">
+            <div class="flex justify-between items-center mb-2">
+                <div class="flex items-center gap-2 text-gray-700 font-semibold text-sm">
+                    <i class="ph ph-piggy-bank" style="color: #FFAFCC;"></i> Savings Consistency
+                </div>
+                <div class="font-bold text-gray-800 text-sm">{{ savings_score }}
+                    <span class="text-gray-400 font-normal text-xs">/ 300</span>
+                </div>
+            </div>
+            <div class="w-full rounded-full h-2 overflow-hidden" style="background: rgba(255,200,221,0.25);">
+                <div class="h-2 rounded-full" style="width: {{ (savings_score/300)*100 }}%; background: linear-gradient(90deg,#FFC8DD,#FFAFCC);"></div>
+            </div>
+        </div>
+
+        <div class="card" style="border-left: 3px solid #CDB4DB;">
+            <div class="flex justify-between items-center mb-2">
+                <div class="flex items-center gap-2 text-gray-700 font-semibold text-sm">
+                    <i class="ph ph-target" style="color: #CDB4DB;"></i> Budget Management
+                </div>
+                <div class="font-bold text-gray-800 text-sm">{{ budget_score }}
+                    <span class="text-gray-400 font-normal text-xs">/ 250</span>
+                </div>
+            </div>
+            <div class="w-full rounded-full h-2 overflow-hidden" style="background: rgba(205,180,219,0.2);">
+                <div class="h-2 rounded-full" style="width: {{ (budget_score/250)*100 }}%; background: linear-gradient(90deg,#CDB4DB,#A2D2FF);"></div>
+            </div>
+        </div>
+
+        <div class="card" style="border-left: 3px solid #BDE0FE;">
+            <div class="flex justify-between items-center mb-2">
+                <div class="flex items-center gap-2 text-gray-700 font-semibold text-sm">
+                    <i class="ph ph-bank" style="color: #A2D2FF;"></i> EMI Consistency
+                </div>
+                <div class="font-bold text-gray-800 text-sm">{{ emi_score }}
+                    <span class="text-gray-400 font-normal text-xs">/ 200</span>
+                </div>
+            </div>
+            <div class="w-full rounded-full h-2 overflow-hidden" style="background: rgba(189,224,254,0.25);">
+                <div class="h-2 rounded-full" style="width: {{ (emi_score/200)*100 }}%; background: linear-gradient(90deg,#BDE0FE,#A2D2FF);"></div>
+            </div>
+        </div>
+
+        <div class="card" style="border-left: 3px solid #FFAFCC;">
+            <div class="flex justify-between items-center mb-2">
+                <div class="flex items-center gap-2 text-gray-700 font-semibold text-sm">
+                    <i class="ph ph-flag" style="color: #FFAFCC;"></i> Goal Progress
+                </div>
+                <div class="font-bold text-gray-800 text-sm">{{ goals_score }}
+                    <span class="text-gray-400 font-normal text-xs">/ 250</span>
+                </div>
+            </div>
+            <div class="w-full rounded-full h-2 overflow-hidden" style="background: rgba(255,175,204,0.2);">
+                <div class="h-2 rounded-full" style="width: {{ (goals_score/250)*100 }}%; background: linear-gradient(90deg,#FFC8DD,#FFAFCC);"></div>
+            </div>
+        </div>
+    </div>
+
+    <p class="text-xs text-gray-400 text-center max-w-lg mx-auto pb-4">
+        This score is a personal financial-management indicator based only on the information you track in My Finances.
+        It does not represent creditworthiness or a CIBIL score.
+    </p>
+</div>
+{% endblock %}

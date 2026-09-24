@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto space-y-6">
+
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-800">Transactions</h1>
+            <p class="text-sm text-gray-400 mt-0.5">Manage your income and expenses.</p>
+        </div>
+
+        <form method="GET" class="flex flex-wrap gap-2 w-full sm:w-auto items-center">
+            <!-- Search input -->
+            <div class="relative w-full sm:w-48">
+                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-[#CDB4DB]">
+                    <i class="ph ph-magnifying-glass"></i>
+                </div>
+                <input type="text" name="q" value="{{ q }}" placeholder="Search..."
+                       class="block w-full pl-9 pr-3 py-2 bg-[#FDFCFF] border border-[#CDB4DB]/40 rounded-xl text-sm text-gray-800 outline-none">
+            </div>
+
+            <select name="type" onchange="this.form.submit()"
+                    class="border border-[#CDB4DB]/40 rounded-xl py-2 px-3 bg-[#FDFCFF] text-sm outline-none">
+                <option value="all" {% if selected_type == 'all' %}selected{% endif %}>All Types</option>
+                <option value="expense" {% if selected_type == 'expense' %}selected{% endif %}>Expenses</option>
+                <option value="income" {% if selected_type == 'income' %}selected{% endif %}>Income</option>
+            </select>
+
+            <input type="month" name="month" value="{{ selected_month }}" onchange="this.form.submit()"
+                   class="border border-[#CDB4DB]/40 rounded-xl py-2 px-3 bg-[#FDFCFF] text-sm outline-none flex-1 sm:flex-none">
+        </form>
+    </div>
+
+    <div class="card overflow-hidden !p-0">
+        {% if transactions %}
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-[#CDB4DB]/20">
+                <thead style="background: rgba(205,180,219,0.08);">
+                    <tr>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-semibold text-[#9B72AF] uppercase tracking-wider">Date</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-semibold text-[#9B72AF] uppercase tracking-wider">Details</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-semibold text-[#9B72AF] uppercase tracking-wider">Category</th>
+                        <th scope="col" class="px-6 py-3 text-right text-xs font-semibold text-[#9B72AF] uppercase tracking-wider">Amount</th>
+                        <th scope="col" class="px-6 py-3 text-right text-xs font-semibold text-[#9B72AF] uppercase tracking-wider">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-[#CDB4DB]/10 bg-white">
+                    {% for txn in transactions %}
+                    <tr class="transition hover:bg-[#FFC8DD]/10">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {{ txn.date }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="text-sm font-medium text-gray-800">{{ txn.description or txn.category }}</div>
+                            {% if txn.notes %}
+                            <div class="text-xs text-gray-400">{{ txn.notes }}</div>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="px-2.5 py-1 inline-flex text-xs leading-5 font-medium rounded-lg"
+                                  style="background: rgba(189,224,254,0.3); color: #2d7bbf;">
+                                {{ txn.category }}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-bold"
+                            style="color: {% if txn.type == 'expense' %}#4b5563{% else %}#2d8a4e{% endif %};">
+                            {% if txn.type == 'expense' %}-{% else %}+{% endif %}{{ currency }}{{ "{:,.2f}".format(txn.amount) }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                            <a href="{{ url_for('edit_transaction', id=txn.id) }}" class="p-2 rounded-lg transition inline-block text-[#9B72AF] hover:bg-[#CDB4DB]/20">
+                                <i class="ph ph-pencil-simple"></i>
+                            </a>
+                            <form action="{{ url_for('delete_transaction', id=txn.id) }}" method="POST" class="inline" onsubmit="return confirm('Are you sure you want to delete this transaction?');">
+                                <button type="submit" class="p-2 rounded-lg transition"
+                                        style="color: #c0445e;"
+                                        onmouseover="this.style.background='rgba(248,113,113,0.12)'"
+                                        onmouseout="this.style.background='transparent'">
+                                    <i class="ph ph-trash"></i>
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-16 px-4">
+            <div class="rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4"
+                 style="background: rgba(205,180,219,0.15);">
+                <i class="ph ph-receipt text-3xl" style="color: #CDB4DB;"></i>
+            </div>
+            <h3 class="text-lg font-medium text-gray-800 mb-1">No transactions found</h3>
+            <p class="text-gray-400 mb-4 text-sm">You haven't added any transactions for this period.</p>
+            <button @click="addTransactionOpen = true" class="font-medium hover:underline" style="color: #9B72AF;">
+                Add your first transaction
+            </button>
+        </div>
+        {% endif %}
+    </div>
+
+</div>
+{% endblock %}

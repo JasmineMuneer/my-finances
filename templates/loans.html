@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto space-y-6" x-data="{ addLoanOpen: false }">
+
+    <div class="flex justify-between items-end">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-800">EMIs & Loans</h1>
+            <p class="text-sm text-gray-400 mt-0.5">Track your debt and upcoming payments.</p>
+        </div>
+        <button @click="addLoanOpen = true"
+                class="px-4 py-2 rounded-xl font-medium transition flex items-center gap-2 hover:opacity-80"
+                style="background:rgba(205,180,219,0.18); color:#9B72AF;">
+            <i class="ph ph-plus"></i> <span class="hidden sm:inline">Add Loan</span>
+        </button>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="card flex items-center gap-4" style="border: 1px solid rgba(205,180,219,0.25);">
+            <div class="p-4 rounded-xl" style="background:rgba(248,113,113,0.12);color:#c0445e"><i class="ph ph-bank text-3xl"></i></div>
+            <div>
+                <p class="text-sm text-gray-500 font-medium">Total Outstanding</p>
+                <p class="text-2xl font-bold text-gray-800">{{ currency }}{{ "{:,.0f}".format(total_outstanding) }}</p>
+            </div>
+        </div>
+        <div class="card flex items-center gap-4" style="border: 1px solid rgba(205,180,219,0.25);">
+            <div class="p-4 rounded-xl" style="background:rgba(251,191,36,0.12);color:#92400e"><i class="ph ph-calendar-blank text-3xl"></i></div>
+            <div>
+                <p class="text-sm text-gray-500 font-medium">Total Monthly EMI</p>
+                <p class="text-2xl font-bold text-gray-800">{{ currency }}{{ "{:,.0f}".format(total_emi) }}</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loans List -->
+    {% if loans %}
+    <div class="space-y-4">
+        {% for loan in loans %}
+        <div class="card" style="border: 1px solid rgba(205,180,219,0.25);">
+            <div class="flex flex-col md:flex-row justify-between md:items-center gap-4 mb-4">
+                <div>
+                    <h3 class="font-bold text-lg text-gray-800">{{ loan.name }}</h3>
+                    <p class="text-sm text-gray-500">{% if loan.lender %}{{ loan.lender }} • {% endif %}Due on {{ loan.due_day }} of month</p>
+                </div>
+                <div class="text-left md:text-right">
+                    <p class="text-xl font-bold text-gray-800">{{ currency }}{{ "{:,.0f}".format(loan.monthly_emi) }} <span class="text-sm font-normal text-gray-400">/ month</span></p>
+                    <p class="text-sm font-medium"
+                       style="{% if loan.remaining_installments == 0 %}color:#166534{% else %}color:#92400e{% endif %}">
+                        {{ loan.remaining_installments }} of {{ loan.total_installments }} EMIs left
+                    </p>
+                </div>
+            </div>
+
+            <div class="w-full rounded-full h-2 mb-4" style="background: rgba(205,180,219,0.2);">
+                {% set progress = ((loan.total_installments - loan.remaining_installments) / loan.total_installments * 100) if loan.total_installments > 0 else 0 %}
+                <div class="h-2 rounded-full"
+                     style="width: {{ progress }}%; background: {% if progress >= 100 %}#4ADE80{% else %}linear-gradient(90deg,#CDB4DB,#A2D2FF){% endif %}"></div>
+            </div>
+
+            <div class="flex justify-between items-center border-t border-[#CDB4DB]/15 pt-4">
+                <form action="{{ url_for('delete_loan', id=loan.id) }}" method="POST" onsubmit="return confirm('Delete this loan entirely?');">
+                    <button type="submit" class="text-sm text-gray-400 transition flex items-center gap-1"
+                            onmouseover="this.style.color='#c0445e'" onmouseout="this.style.color=''">
+                        <i class="ph ph-trash"></i> Remove
+                    </button>
+                </form>
+
+                {% if loan.remaining_installments > 0 %}
+                <form action="{{ url_for('pay_emi', id=loan.id) }}" method="POST">
+                    <button type="submit" class="text-sm px-3 py-1.5 rounded-lg font-medium transition flex items-center gap-1 hover:opacity-80"
+                            style="background:rgba(74,222,128,0.12); color:#166534;">
+                        <i class="ph ph-check-circle"></i> Mark Paid
+                    </button>
+                </form>
+                {% else %}
+                <span class="text-sm px-3 py-1.5 rounded-lg font-medium" style="background:rgba(74,222,128,0.12); color:#166534;">Fully Paid!</span>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="card text-center py-16" style="border: 1px solid rgba(205,180,219,0.25);">
+        <div class="rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4"
+             style="background: rgba(205,180,219,0.15);">
+            <i class="ph ph-bank text-3xl" style="color:#CDB4DB;"></i>
+        </div>
+        <h3 class="text-lg font-medium text-gray-800 mb-1">No loans added</h3>
+        <p class="text-gray-400 mb-4 text-sm">Keep track of your active loans and EMIs.</p>
+        <button @click="addLoanOpen = true" class="font-medium hover:underline" style="color:#9B72AF;">Add a loan</button>
+    </div>
+    {% endif %}
+
+    <!-- Add Loan Modal -->
+    <div x-show="addLoanOpen" class="fixed inset-0 z-50 overflow-y-auto" style="display: none;">
+        <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            <div x-show="addLoanOpen" class="fixed inset-0 bg-black/25 backdrop-blur-sm transition-opacity" @click="addLoanOpen = false"></div>
+            <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
+            <div x-show="addLoanOpen" class="inline-block align-bottom bg-white rounded-2xl text-left overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg w-full"
+                 style="border: 1px solid rgba(205,180,219,0.3);">
+                <form action="{{ url_for('loans') }}" method="POST">
+                    <div class="px-6 pt-6 pb-4">
+                        <div class="flex justify-between items-center mb-5">
+                            <h3 class="text-xl font-semibold text-gray-800">Add Loan</h3>
+                            <button type="button" @click="addLoanOpen = false" class="text-gray-400 hover:text-gray-600"><i class="ph ph-x text-2xl"></i></button>
+                        </div>
+                        <div class="space-y-4">
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-600 mb-1">Loan Name</label>
+                                    <input type="text" name="name" required class="block w-full py-3 px-3 bg-[#FDFCFF] border border-[#CDB4DB]/40 rounded-xl outline-none text-gray-700" placeholder="Car Loan">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-600 mb-1">Lender (Bank)</label>
+                                    <input type="text" name="lender" class="block w-full py-3 px-3 bg-[#FDFCFF] border border-[#CDB4DB]/40 rounded-xl outline-none text-gray-700" placeholder="HDFC">
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-600 mb-1">Principal Amount</label>
+                                    <div class="relative">
+                                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><span class="text-gray-400 sm:text-sm">{{ currency }}</span></div>
+                                        <input type="number" step="1" name="principal" required class="block w-full pl-8 pr-3 py-3 bg-[#FDFCFF] border border-[#CDB4DB]/40 rounded-xl text-gray-800 font-semibold outline-none sm:text-sm" placeholder="0">
+                                    </div>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-600 mb-1">Interest Rate (%)</label>
+                                    <input type="number" step="0.1" name="interest_rate" class="block w-full py-3 px-3 bg-[#FDFCFF] border border-[#CDB4DB]/40 rounded-xl outline-none text-gray-700 sm:text-sm" placeholder="8.5">
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-3 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-600 mb-1">Monthly EMI</label>
+                                    <input type="number" step="1" name="monthly_emi" required class="block w-full py-3 px-3 bg-[#FDFCFF] border border-[#CDB4DB]/40 rounded-xl outline-none text-gray-700 sm:text-sm" placeholder="0">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-600 mb-1">Total EMIs</label>
+                                    <input type="number" step="1" name="total_installments" required class="block w-full py-3 px-3 bg-[#FDFCFF] border border-[#CDB4DB]/40 rounded-xl outline-none text-gray-700 sm:text-sm" placeholder="48">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-600 mb-1">Due Day</label>
+                                    <input type="number" step="1" min="1" max="31" name="due_day" required class="block w-full py-3 px-3 bg-[#FDFCFF] border border-[#CDB4DB]/40 rounded-xl outline-none text-gray-700 sm:text-sm" placeholder="5">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="px-6 py-4 flex gap-3 border-t border-[#CDB4DB]/15" style="background: rgba(253,252,255,0.8);">
+                        <button type="submit" class="btn-primary flex-1 py-3 rounded-xl text-sm">Save Loan</button>
+                        <button type="button" @click="addLoanOpen = false" class="btn-secondary flex-1 py-3 rounded-xl text-sm">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto space-y-6" x-data="analyticsData()">
+
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900">Analytics</h1>
+            <p class="text-sm text-gray-500">Understand where your money goes.</p>
+        </div>
+        <div class="flex gap-2 w-full sm:w-auto">
+            <input type="month" x-model="selectedMonth" @change="fetchData()" class="border-gray-200 rounded-xl py-2 px-3 bg-white text-sm focus:ring-primary focus:border-primary border outline-none flex-1 sm:flex-none">
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        
+        <!-- Category Breakdown -->
+        <div class="card flex flex-col">
+            <h3 class="font-semibold text-gray-800 mb-4">Where did my money go this month?</h3>
+            <div class="flex-1 min-h-[300px] relative">
+                <canvas id="categoryChart"></canvas>
+                <div x-show="loading" class="absolute inset-0 flex items-center justify-center bg-white/80">
+                    <i class="ph ph-spinner-gap animate-spin text-3xl text-primary"></i>
+                </div>
+                <div x-show="!loading && categoryData.length === 0" class="absolute inset-0 flex items-center justify-center bg-white">
+                    <p class="text-gray-500 text-sm">No expenses this month</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 6 Month Trend -->
+        <div class="card flex flex-col">
+            <h3 class="font-semibold text-gray-800 mb-4">Income vs Spending (6 Months)</h3>
+            <div class="flex-1 min-h-[300px] relative">
+                <canvas id="trendChart"></canvas>
+                <div x-show="loading" class="absolute inset-0 flex items-center justify-center bg-white/80">
+                    <i class="ph ph-spinner-gap animate-spin text-3xl text-primary"></i>
+                </div>
+            </div>
+        </div>
+        
+    </div>
+
+</div>
+
+<script>
+document.addEventListener('alpine:init', () => {
+    Alpine.data('analyticsData', () => ({
+        selectedMonth: new Date().toISOString().slice(0, 7),
+        loading: false,
+        categoryData: [],
+        trendData: [],
+        catChart: null,
+        trndChart: null,
+        
+        init() {
+            this.fetchData();
+        },
+        
+        async fetchData() {
+            this.loading = true;
+            try {
+                const res = await fetch(`/api/analytics/data?month=${this.selectedMonth}`);
+                const data = await res.json();
+                this.categoryData = data.expenses_by_category;
+                this.trendData = data.trend;
+                this.renderCharts();
+            } catch (e) {
+                console.error(e);
+            }
+            this.loading = false;
+        },
+        
+        renderCharts() {
+            // Pastel color palette for categories
+            const colors = ['#CDB4DB', '#FFAFCC', '#BDE0FE', '#FFC8DD', '#A2D2FF', '#d8b4fe', '#fda4af', '#93c5fd'];
+
+            // Category Doughnut Chart
+            if (this.catChart) this.catChart.destroy();
+            if (this.categoryData.length > 0) {
+                const catCtx = document.getElementById('categoryChart').getContext('2d');
+                this.catChart = new Chart(catCtx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: this.categoryData.map(d => d.category),
+                        datasets: [{
+                            data: this.categoryData.map(d => d.total),
+                            backgroundColor: colors,
+                            borderWidth: 2,
+                            borderColor: '#FDFCFF',
+                            hoverOffset: 6
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { position: 'right', labels: { color: '#6b7280', padding: 12, font: { size: 12 } } } },
+                        cutout: '72%'
+                    }
+                });
+            }
+
+            // 6-month Trend Bar Chart
+            if (this.trndChart) this.trndChart.destroy();
+            const months = [...new Set(this.trendData.map(d => d.month))];
+            const incomes  = months.map(m => { const r = this.trendData.find(d => d.month === m && d.type === 'income');  return r ? r.total : 0; });
+            const expenses = months.map(m => { const r = this.trendData.find(d => d.month === m && d.type === 'expense'); return r ? r.total : 0; });
+
+            const trndCtx = document.getElementById('trendChart').getContext('2d');
+            this.trndChart = new Chart(trndCtx, {
+                type: 'bar',
+                data: {
+                    labels: months.map(m => { const d = new Date(m + '-01'); return d.toLocaleString('default', { month: 'short' }); }),
+                    datasets: [
+                        { label: 'Income',  data: incomes,  backgroundColor: '#BDE0FE', borderRadius: 6, borderSkipped: false },
+                        { label: 'Expense', data: expenses, backgroundColor: '#FFAFCC', borderRadius: 6, borderSkipped: false }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: { beginAtZero: true, grid: { color: 'rgba(205,180,219,0.18)' }, border: { display: false }, ticks: { color: '#9ca3af' } },
+                        x: { grid: { display: false }, border: { display: false }, ticks: { color: '#6b7280' } }
+                    },
+                    plugins: { legend: { labels: { color: '#6b7280' } } }
+                }
+            });
+        }
+    }));
+});
+</script>
+{% endblock %}

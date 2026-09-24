@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto space-y-6" x-data="{ addGoalOpen: false, addMoneyOpen: false, selectedGoal: null }">
+
+    <div class="flex justify-between items-end">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-800">Savings Goals</h1>
+            <p class="text-sm text-gray-400 mt-0.5">Plan and track your future.</p>
+        </div>
+        <button @click="addGoalOpen = true" class="btn-primary px-4 py-2 rounded-xl text-sm flex items-center gap-2">
+            <i class="ph ph-plus"></i> <span class="hidden sm:inline">New Goal</span>
+        </button>
+    </div>
+
+    <!-- Goals List -->
+    {% if goals %}
+    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+        {% for g in goals %}
+        <div class="card flex flex-col justify-between" style="border: 1px solid rgba(205,180,219,0.25);">
+            <div>
+                <div class="flex justify-between items-start mb-2">
+                    <h3 class="font-bold text-lg text-gray-800">{{ g.name }}</h3>
+                    <div class="flex gap-2">
+                        <button @click="selectedGoal = {{ g.id }}; addMoneyOpen = true;"
+                                class="p-2 rounded-lg transition hover:opacity-80"
+                                style="background:rgba(205,180,219,0.18);color:#9B72AF" title="Add Funds">
+                            <i class="ph ph-plus"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <p class="text-3xl font-bold text-gray-800 mb-1">{{ currency }}{{ "{:,.0f}".format(g.current_amount) }}</p>
+                <p class="text-sm text-gray-400 mb-4">of {{ currency }}{{ "{:,.0f}".format(g.target_amount) }} goal</p>
+
+                <!-- Progress bar -->
+                <div class="w-full rounded-full h-3 mb-2 overflow-hidden" style="background: rgba(205,180,219,0.2);">
+                    <div class="h-3 rounded-full"
+                         style="width: {{ g.progress }}%; {% if g.progress >= 100 %}background:#4ADE80{% else %}background:linear-gradient(90deg,#CDB4DB,#A2D2FF){% endif %}"></div>
+                </div>
+                <div class="flex justify-between text-xs font-semibold text-gray-400">
+                    <span>{{ g.progress|round(1) }}% complete</span>
+                    {% if g.target_date %}<span>Target: {{ g.target_date }}</span>{% endif %}
+                </div>
+            </div>
+
+            <div class="mt-6 pt-4 border-t border-[#CDB4DB]/15 flex justify-between items-center">
+                <span class="text-xs text-gray-400">Monthly: {{ currency }}{{ "{:,.0f}".format(g.monthly_contribution) }}</span>
+                <form action="{{ url_for('delete_goal', id=g.id) }}" method="POST" onsubmit="return confirm('Delete this goal?');">
+                    <button type="submit" class="text-gray-400 transition flex items-center gap-1"
+                            onmouseover="this.style.color='#c0445e'" onmouseout="this.style.color=''">
+                        <i class="ph ph-trash"></i> Remove
+                    </button>
+                </form>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="card text-center py-16" style="border: 1px solid rgba(205,180,219,0.25);">
+        <div class="rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4"
+             style="background: rgba(205,180,219,0.15);">
+            <i class="ph ph-piggy-bank text-3xl" style="color:#CDB4DB;"></i>
+        </div>
+        <h3 class="text-lg font-medium text-gray-800 mb-1">No savings goals</h3>
+        <p class="text-gray-400 mb-4 text-sm">Create a goal to start tracking your progress.</p>
+        <button @click="addGoalOpen = true" class="font-medium hover:underline" style="color: #9B72AF;">
+            Set your first goal
+        </button>
+    </div>
+    {% endif %}
+
+    <!-- Add Goal Modal -->
+    <div x-show="addGoalOpen" class="fixed inset-0 z-50 overflow-y-auto" style="display: none;">
+        <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            <div x-show="addGoalOpen" class="fixed inset-0 bg-black/25 backdrop-blur-sm transition-opacity" @click="addGoalOpen = false"></div>
+            <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
+            <div x-show="addGoalOpen" class="inline-block align-bottom bg-white rounded-2xl text-left overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg w-full"
+                 style="border: 1px solid rgba(205,180,219,0.3);">
+                <form action="{{ url_for('goals') }}" method="POST">
+                    <div class="px-6 pt-6 pb-4">
+                        <div class="flex justify-between items-center mb-5">
+                            <h3 class="text-xl font-semibold text-gray-800">New Savings Goal</h3>
+                            <button type="button" @click="addGoalOpen = false" class="text-gray-400 hover:text-gray-600"><i class="ph ph-x text-2xl"></i></button>
+                        </div>
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-600 mb-1">Goal Name</label>
+                                <input type="text" name="name" required class="block w-full py-3 px-3 bg-[#FDFCFF] border border-[#CDB4DB]/40 rounded-xl outline-none text-gray-700" placeholder="e.g. Emergency Fund, New Car">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-600 mb-1">Target Amount</label>
+                                <div class="relative">
+                                    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><span class="text-gray-400 text-lg">{{ currency }}</span></div>
+                                    <input type="number" step="0.01" name="target_amount" required class="block w-full pl-10 pr-4 py-3 bg-[#FDFCFF] border border-[#CDB4DB]/40 rounded-xl text-lg font-semibold text-gray-800 outline-none" placeholder="0.00">
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-600 mb-1">Target Date</label>
+                                    <input type="date" name="target_date" class="block w-full py-3 px-3 bg-[#FDFCFF] border border-[#CDB4DB]/40 rounded-xl outline-none text-gray-700">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-600 mb-1">Monthly Plan (Opt)</label>
+                                    <input type="number" step="0.01" name="monthly_contribution" class="block w-full py-3 px-3 bg-[#FDFCFF] border border-[#CDB4DB]/40 rounded-xl outline-none text-gray-700" placeholder="0.00">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="px-6 py-4 flex gap-3 border-t border-[#CDB4DB]/15" style="background: rgba(253,252,255,0.8);">
+                        <button type="submit" class="btn-primary flex-1 py-3 rounded-xl text-sm">Save Goal</button>
+                        <button type="button" @click="addGoalOpen = false" class="btn-secondary flex-1 py-3 rounded-xl text-sm">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Funds Modal -->
+    <div x-show="addMoneyOpen" class="fixed inset-0 z-50 overflow-y-auto" style="display: none;">
+        <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            <div x-show="addMoneyOpen" class="fixed inset-0 bg-black/25 backdrop-blur-sm" @click="addMoneyOpen = false"></div>
+            <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
+            <div x-show="addMoneyOpen" class="inline-block align-bottom bg-white rounded-2xl text-left overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle sm:max-w-sm w-full"
+                 style="border: 1px solid rgba(205,180,219,0.3);">
+                <!-- Using Alpine string interpolation for dynamic form action -->
+                <form :action="'{{ url_for('update_goal', id=0) }}'.replace('0', selectedGoal)" method="POST">
+                    <div class="px-6 pt-6 pb-4">
+                        <div class="flex justify-between items-center mb-5">
+                            <h3 class="text-xl font-semibold text-gray-800">Add Funds</h3>
+                            <button type="button" @click="addMoneyOpen = false" class="text-gray-400 hover:text-gray-600"><i class="ph ph-x text-xl"></i></button>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-600 mb-1">Amount to Add</label>
+                            <div class="relative">
+                                <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><span class="text-gray-400 text-lg">{{ currency }}</span></div>
+                                <input type="number" step="0.01" name="added_amount" required class="block w-full pl-10 pr-4 py-3 bg-[#FDFCFF] border border-[#CDB4DB]/40 rounded-xl text-lg font-semibold text-gray-800 outline-none" placeholder="0.00">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="px-6 py-4 flex gap-3 border-t border-[#CDB4DB]/15" style="background: rgba(253,252,255,0.8);">
+                        <button type="submit" class="btn-primary flex-1 py-3 rounded-xl text-sm">Add Funds</button>
+                        <button type="button" @click="addMoneyOpen = false" class="btn-secondary flex-1 py-3 rounded-xl text-sm">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

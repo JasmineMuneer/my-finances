@@ -1,0 +1,302 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto space-y-6">
+
+    <!-- Smart Alerts -->
+    <div id="alerts-container" class="space-y-2 hidden"></div>
+
+    <!-- Page header -->
+    <div class="flex justify-between items-center">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-800">Overview</h1>
+            <p class="text-sm text-gray-400 mt-0.5">{{ current_month }}</p>
+        </div>
+        <a href="{{ url_for('score') }}"
+           class="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-bold"
+           style="background: rgba(205,180,219,0.18); color: #9B72AF;">
+            <i class="ph ph-medal text-base"></i>
+            {{ money_score }} / 1000
+        </a>
+    </div>
+
+    <!-- Top 3 Summary Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+
+        <!-- Savings Card — lavender gradient -->
+        <div class="rounded-2xl p-6 shadow-md relative overflow-hidden"
+             style="background: linear-gradient(135deg, #F0E6F6 0%, #CDB4DB 100%); border: 1px solid rgba(205,180,219,0.4);">
+            <div class="flex justify-between items-start mb-4">
+                <div class="p-2 rounded-xl" style="background: rgba(255,255,255,0.4);">
+                    <i class="ph ph-piggy-bank text-2xl" style="color: #654673;"></i>
+                </div>
+                <span class="text-xs font-semibold px-2.5 py-1 rounded-full"
+                      style="background: rgba(255,255,255,0.5); color: #4a2c5a;">
+                    {{ savings_rate|round(1) }}% saved
+                </span>
+            </div>
+            <p class="text-sm font-medium" style="color: #4a2c5a;">Monthly Savings</p>
+            <h2 class="text-3xl font-black mt-1" style="color: #311840;">{{ currency }}{{ "{:,.2f}".format(savings) }}</h2>
+        </div>
+
+        <!-- Income Card — baby blue -->
+        <div class="card" style="border-left: 4px solid #BDE0FE;">
+            <div class="flex items-center gap-3 mb-3">
+                <div class="p-2 rounded-xl" style="background: rgba(189,224,254,0.35);">
+                    <i class="ph ph-arrow-down-left text-xl" style="color: #2d7bbf;"></i>
+                </div>
+                <p class="text-gray-500 text-sm font-medium">Income</p>
+            </div>
+            <h2 class="text-2xl font-bold text-gray-800">{{ currency }}{{ "{:,.2f}".format(income) }}</h2>
+        </div>
+
+        <!-- Expenses Card — soft lavender -->
+        <div class="card" style="border-left: 4px solid #CDB4DB;">
+            <div class="flex items-center gap-3 mb-3">
+                <div class="p-2 rounded-xl" style="background: rgba(205,180,219,0.25);">
+                    <i class="ph ph-arrow-up-right text-xl" style="color: #7a4a9a;"></i>
+                </div>
+                <p class="text-gray-500 text-sm font-medium">Expenses</p>
+            </div>
+            <h2 class="text-2xl font-bold text-gray-800">{{ currency }}{{ "{:,.2f}".format(expenses) }}</h2>
+        </div>
+    </div>
+
+    <!-- Financial Insights Card -->
+    <div x-data="financialInsights()" class="card" style="border: 1px solid rgba(205,180,219,0.3); background: linear-gradient(to right, #FDFCFF, #f8f1fa);">
+        <div class="flex justify-between items-start">
+            <div class="flex items-center gap-3 mb-2">
+                <div class="p-2 rounded-xl" style="background: rgba(205,180,219,0.25);">
+                    <i class="ph-fill ph-chart-line-up text-xl text-[#9B72AF]"></i>
+                </div>
+                <h3 class="font-bold text-gray-800">Financial Insights</h3>
+            </div>
+            <div class="flex items-center gap-2">
+                <button @click="fetchInsight()" x-show="!loading && !insight" class="btn-primary px-4 py-1.5 rounded-full text-xs font-semibold">
+                    Analyze
+                </button>
+                <button @click="fetchInsight()" x-show="!loading && insight" class="text-xs text-[#9B72AF] font-medium hover:underline">
+                    Refresh
+                </button>
+            </div>
+        </div>
+
+        <div class="mt-3">
+            <template x-if="loading">
+                <div class="flex items-center gap-2 text-sm text-gray-500 animate-pulse">
+                    <i class="ph ph-spinner-gap animate-spin text-[#9B72AF]"></i> Analyzing your finances...
+                </div>
+            </template>
+            <template x-if="insight">
+                <div>
+                    <p class="text-sm text-gray-700 leading-relaxed" x-text="insight"></p>
+                    <template x-if="aiUsed">
+                        <p class="text-[10px] text-gray-300 mt-2 text-right select-none">✦ AI</p>
+                    </template>
+                </div>
+            </template>
+            <template x-if="!loading && !insight">
+                <p class="text-sm text-gray-400">Click Analyze to get a personalized summary of your spending, savings, and upcoming obligations this month.</p>
+            </template>
+        </div>
+    </div>
+
+    <script>
+    function financialInsights() {
+        return {
+            loading: false,
+            insight: null,
+            aiUsed: false,
+            fetchInsight() {
+                this.loading = true;
+                this.insight = null;
+                this.aiUsed = false;
+                fetch('/api/financial-insights')
+                    .then(r => r.json())
+                    .then(data => {
+                        this.loading = false;
+                        this.insight = data.insight || 'Could not generate an insight right now.';
+                        this.aiUsed = data.ai_used || false;
+                    })
+                    .catch(() => {
+                        this.loading = false;
+                        this.insight = 'Could not reach the server. Please try again.';
+                    });
+            }
+        }
+    }
+    </script>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+        <!-- Charts & Transactions -->
+        <div class="lg:col-span-2 space-y-6">
+
+            <!-- Chart -->
+            <div class="card">
+                <h3 class="font-semibold text-gray-700 mb-4">Income vs Expense</h3>
+                <div class="h-48">
+                    <canvas id="dashboardChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Recent Transactions -->
+            <div class="card">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="font-semibold text-gray-700">Recent Activity</h3>
+                    <a href="{{ url_for('transactions') }}" class="text-sm font-medium hover:underline" style="color: #9B72AF;">View All</a>
+                </div>
+
+                {% if recent_transactions %}
+                <div class="space-y-2">
+                    {% for txn in recent_transactions %}
+                    <div class="flex items-center justify-between p-3 rounded-xl transition hover:bg-[#FFC8DD]/10">
+                        <div class="flex items-center gap-3">
+                            <div class="p-2.5 rounded-full text-sm
+                                {% if txn.type == 'expense' %}{% else %}{% endif %}"
+                                 style="background: {% if txn.type == 'expense' %}rgba(255,175,204,0.2){% else %}rgba(189,224,254,0.3){% endif %};
+                                        color: {% if txn.type == 'expense' %}#a03060{% else %}#2d7bbf{% endif %};">
+                                {% if txn.category in ['Food','Groceries'] %}<i class="ph-fill ph-hamburger"></i>
+                                {% elif txn.category == 'Shopping' %}<i class="ph-fill ph-shopping-bag"></i>
+                                {% elif txn.category == 'Transport' %}<i class="ph-fill ph-car"></i>
+                                {% elif txn.type == 'income' %}<i class="ph-fill ph-money"></i>
+                                {% else %}<i class="ph-fill ph-receipt"></i>{% endif %}
+                            </div>
+                            <div>
+                                <p class="font-semibold text-gray-800 text-sm">{{ txn.description or txn.category }}</p>
+                                <p class="text-xs text-gray-400">{{ txn.date }} · {{ txn.category }}</p>
+                            </div>
+                        </div>
+                        <p class="font-bold text-sm {% if txn.type == 'expense' %}text-gray-700{% else %}text-green-600{% endif %}">
+                            {% if txn.type == 'expense' %}-{% else %}+{% endif %}{{ currency }}{{ "{:,.2f}".format(txn.amount) }}
+                        </p>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center py-10">
+                    <i class="ph ph-receipt text-4xl" style="color: #CDB4DB;"></i>
+                    <p class="text-sm text-gray-400 mt-2">No transactions yet</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Right sidebar -->
+        <div class="space-y-6">
+
+            <!-- Top Categories -->
+            <div class="card">
+                <h3 class="font-semibold text-gray-700 mb-4">Top Spending</h3>
+                {% if top_categories %}
+                <div class="space-y-4">
+                    {% for cat in top_categories %}
+                    <div>
+                        <div class="flex justify-between text-sm mb-1.5">
+                            <span class="font-medium text-gray-600">{{ cat.category }}</span>
+                            <span class="font-semibold text-gray-800">{{ currency }}{{ "{:,.0f}".format(cat.total) }}</span>
+                        </div>
+                        <div class="w-full rounded-full h-2" style="background: rgba(205,180,219,0.2);">
+                            <div class="h-2 rounded-full" style="background: linear-gradient(90deg,#CDB4DB,#A2D2FF); width: {{ (cat.total / expenses * 100) if expenses > 0 else 0 }}%;"></div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-sm text-gray-400 text-center py-6">No spending this month</p>
+                {% endif %}
+            </div>
+
+            <!-- Upcoming Bills -->
+            <div class="card">
+                <h3 class="font-semibold text-gray-700 mb-4">Upcoming Bills</h3>
+                {% if upcoming_bills or upcoming_emis %}
+                <div class="space-y-3">
+                    {% for bill in upcoming_bills %}
+                    <div class="flex justify-between items-center p-3 rounded-xl" style="background: rgba(255,200,221,0.15); border: 1px solid rgba(255,175,204,0.2);">
+                        <div class="flex items-center gap-2">
+                            <i class="ph ph-lightning text-base" style="color: #e8a000;"></i>
+                            <div>
+                                <p class="text-sm font-semibold text-gray-700">{{ bill.name }}</p>
+                                <p class="text-xs text-gray-400">Day {{ bill.due_day }}</p>
+                            </div>
+                        </div>
+                        <span class="font-bold text-sm text-gray-800">{{ currency }}{{ "{:,.0f}".format(bill.amount) }}</span>
+                    </div>
+                    {% endfor %}
+                    {% for emi in upcoming_emis %}
+                    <div class="flex justify-between items-center p-3 rounded-xl" style="background: rgba(205,180,219,0.12); border: 1px solid rgba(205,180,219,0.25);">
+                        <div class="flex items-center gap-2">
+                            <i class="ph ph-bank text-base" style="color: #9B72AF;"></i>
+                            <div>
+                                <p class="text-sm font-semibold text-gray-700">{{ emi.name }}</p>
+                                <p class="text-xs text-gray-400">Day {{ emi.due_day }}</p>
+                            </div>
+                        </div>
+                        <span class="font-bold text-sm text-gray-800">{{ currency }}{{ "{:,.0f}".format(emi.monthly_emi) }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-sm text-gray-400 text-center py-6">No upcoming obligations</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    // Dashboard chart — pastel colors
+    const ctx = document.getElementById('dashboardChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: ['Income', 'Expenses', 'Savings'],
+            datasets: [{
+                label: 'Amount',
+                data: [{{ income }}, {{ expenses }}, {{ savings > 0 and savings or 0 }}],
+                backgroundColor: ['#BDE0FE', '#FFAFCC', '#CDB4DB'],
+                borderRadius: 8,
+                borderSkipped: false,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                y: { beginAtZero: true, grid: { color: 'rgba(205,180,219,0.15)' }, border: { display: false }, ticks: { color: '#9ca3af' } },
+                x: { grid: { display: false }, border: { display: false }, ticks: { color: '#6b7280' } }
+            }
+        }
+    });
+
+    // Smart alerts (rule-based)
+    fetch('/api/alerts')
+        .then(r => r.json())
+        .then(alerts => {
+            if (!alerts.length) return;
+            const styles = {
+                danger:  'background:rgba(248,113,113,0.12); border:1px solid rgba(248,113,113,0.3); color:#b91c1c;',
+                warning: 'background:rgba(251,191,36,0.12); border:1px solid rgba(251,191,36,0.3); color:#92400e;',
+                success: 'background:rgba(74,222,128,0.12); border:1px solid rgba(74,222,128,0.3); color:#166534;',
+                info:    'background:rgba(162,210,255,0.2); border:1px solid rgba(162,210,255,0.4); color:#1e40af;',
+            };
+            const icons = { danger: 'ph-warning-circle', warning: 'ph-warning', success: 'ph-check-circle', info: 'ph-info' };
+            const container = document.getElementById('alerts-container');
+            container.classList.remove('hidden');
+            alerts.slice(0, 5).forEach(a => {
+                const s = styles[a.type] || styles.info;
+                const icon = icons[a.type] || 'ph-info';
+                container.insertAdjacentHTML('beforeend',
+                    `<div class="flex items-start gap-3 px-4 py-3 rounded-xl text-sm font-medium" style="${s}">
+                        <i class="ph ${icon} text-lg flex-shrink-0 mt-0.5"></i>
+                        <span>${a.msg}</span>
+                    </div>`);
+            });
+        })
+        .catch(() => {});
+});
+</script>
+{% endblock %}

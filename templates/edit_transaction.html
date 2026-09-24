@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto space-y-6">
+
+    <div class="flex justify-between items-center">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-800">Edit Transaction</h1>
+            <p class="text-sm text-gray-400 mt-0.5">Update details of your transaction.</p>
+        </div>
+        <a href="{{ url_for('transactions') }}" class="text-sm text-[#9B72AF] font-medium hover:underline">Cancel</a>
+    </div>
+
+    <div class="card" x-data="{ type: '{{ txn.type }}' }">
+        <form action="{{ url_for('edit_transaction', id=txn.id) }}" method="POST" class="space-y-4">
+            
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-600 mb-1">Amount</label>
+                    <input type="number" step="0.01" name="amount" value="{{ txn.amount }}" required
+                           class="block w-full py-2.5 px-3 bg-[#FDFCFF] border border-[#CDB4DB]/40 rounded-xl text-sm outline-none focus:border-[#CDB4DB]">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-600 mb-1">Date</label>
+                    <input type="date" name="date" value="{{ txn.date }}" required
+                           class="block w-full py-2.5 px-3 bg-[#FDFCFF] border border-[#CDB4DB]/40 rounded-xl text-sm outline-none focus:border-[#CDB4DB]">
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-600 mb-1">Type</label>
+                    <select name="type" x-model="type" required
+                            class="block w-full py-2.5 px-3 bg-[#FDFCFF] border border-[#CDB4DB]/40 rounded-xl text-sm outline-none">
+                        <option value="expense">Expense</option>
+                        <option value="income">Income</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-600 mb-1">Category</label>
+                    <template x-if="type === 'expense'">
+                        <select name="category" required
+                                class="block w-full py-2.5 px-3 bg-[#FDFCFF] border border-[#CDB4DB]/40 rounded-xl text-sm outline-none">
+                            {% for cat in expense_categories %}
+                            <option value="{{ cat }}" {% if txn.category == cat %}selected{% endif %}>{{ cat }}</option>
+                            {% endfor %}
+                        </select>
+                    </template>
+                    <template x-if="type === 'income'">
+                        <select name="category" required
+                                class="block w-full py-2.5 px-3 bg-[#FDFCFF] border border-[#CDB4DB]/40 rounded-xl text-sm outline-none">
+                            {% for cat in income_categories %}
+                            <option value="{{ cat }}" {% if txn.category == cat %}selected{% endif %}>{{ cat }}</option>
+                            {% endfor %}
+                        </select>
+                    </template>
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-600 mb-1">Description</label>
+                <input type="text" name="description" value="{{ txn.description }}" required
+                       class="block w-full py-2.5 px-3 bg-[#FDFCFF] border border-[#CDB4DB]/40 rounded-xl text-sm outline-none focus:border-[#CDB4DB]">
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+                <div class="col-span-2 sm:col-span-1">
+                    <label class="block text-sm font-medium text-gray-600 mb-1">Payment Method (Optional)</label>
+                    <input type="text" name="payment_method" value="{{ txn.payment_method }}"
+                           class="block w-full py-2.5 px-3 bg-[#FDFCFF] border border-[#CDB4DB]/40 rounded-xl text-sm outline-none focus:border-[#CDB4DB]">
+                </div>
+                <div class="col-span-2 sm:col-span-1">
+                    <label class="block text-sm font-medium text-gray-600 mb-1">Notes (Optional)</label>
+                    <input type="text" name="notes" value="{{ txn.notes }}"
+                           class="block w-full py-2.5 px-3 bg-[#FDFCFF] border border-[#CDB4DB]/40 rounded-xl text-sm outline-none focus:border-[#CDB4DB]">
+                </div>
+            </div>
+
+            <div class="pt-4 flex justify-end gap-3">
+                <button type="submit" class="btn-primary px-6 py-2 rounded-xl text-sm">
+                    Save Changes
+                </button>
+            </div>
+        </form>
+    </div>
+
+</div>
+{% endblock %}

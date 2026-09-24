@@ -1,0 +1,38 @@
+# === Python ===
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+
+# === Virtual Environment ===
+venv/
+env/
+.venv/
+
+# === Database ===
+# Ignore the SQLite database so you don't accidentally commit your personal financial data!
+finances.db
+*.sqlite3
+*.db
+
+# === Secrets & Environment Variables ===
+.env
+.env.local
+.env.*
+
+# === IDEs and OS files ===
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+ehthumbs.db
+
+# === Scratch & Diagnostic files ===
+# Ignoring the temporary AI testing scripts we made earlier
+check_models.py
+test_ai.py
+test_output.txt

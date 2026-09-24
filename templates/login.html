@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - My Finances</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #FDFCFF;
+            color: #2D2D3A;
+        }
+        .card {
+            background-color: white;
+            border-radius: 1.25rem;
+            box-shadow: 0 4px 24px rgba(205, 180, 219, 0.15);
+            border: 1px solid rgba(205, 180, 219, 0.3);
+            padding: 2.5rem;
+        }
+        .btn-primary {
+            background-color: #FFAFCC;
+            color: #5a2d3d;
+            font-weight: 600;
+            transition: background-color 0.15s ease, box-shadow 0.15s ease;
+        }
+        .btn-primary:hover {
+            background-color: #ff95bc;
+            box-shadow: 0 4px 14px rgba(255, 175, 204, 0.45);
+        }
+        input:focus {
+            outline: none;
+            border-color: #CDB4DB !important;
+            box-shadow: 0 0 0 3px rgba(205, 180, 219, 0.25);
+        }
+    </style>
+</head>
+<body class="antialiased h-screen flex items-center justify-center p-4 relative overflow-hidden">
+    
+    <!-- Decorative blobs -->
+    <div class="absolute top-[-10%] left-[-10%] w-96 h-96 bg-[#CDB4DB] rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob"></div>
+    <div class="absolute top-[20%] right-[-10%] w-96 h-96 bg-[#FFC8DD] rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-2000"></div>
+    <div class="absolute bottom-[-20%] left-[20%] w-96 h-96 bg-[#BDE0FE] rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-4000"></div>
+
+    <div class="w-full max-w-md relative z-10">
+        <div class="text-center mb-8">
+            <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-white shadow-lg border border-[#CDB4DB]/20 mb-4 text-[#9B72AF]">
+                <i class="ph-fill ph-wallet text-3xl"></i>
+            </div>
+            <h1 class="text-3xl font-bold text-gray-800">Welcome Back</h1>
+            <p class="text-gray-500 mt-2">Sign in to manage your finances</p>
+        </div>
+
+        <div class="card">
+            {% with messages = get_flashed_messages() %}
+              {% if messages %}
+                <div class="bg-red-50 text-red-600 p-3 rounded-xl text-sm mb-4 border border-red-100 flex items-center gap-2">
+                    <i class="ph-fill ph-warning-circle"></i>
+                    {{ messages[0] }}
+                </div>
+              {% endif %}
+            {% endwith %}
+
+            <form action="{{ url_for('login') }}" method="POST" class="space-y-5">
+                <div>
+                    <label class="block text-sm font-medium text-gray-600 mb-1.5">Username</label>
+                    <div class="relative">
+                        <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
+                            <i class="ph ph-user text-lg"></i>
+                        </div>
+                        <input type="text" name="username" required
+                               class="block w-full pl-10 pr-4 py-3 bg-[#FDFCFF] border border-[#CDB4DB]/40 rounded-xl text-sm text-gray-800"
+                               placeholder="Enter your username">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-600 mb-1.5">Password</label>
+                    <div class="relative">
+                        <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
+                            <i class="ph ph-lock text-lg"></i>
+                        </div>
+                        <input type="password" name="password" required
+                               class="block w-full pl-10 pr-4 py-3 bg-[#FDFCFF] border border-[#CDB4DB]/40 rounded-xl text-sm text-gray-800"
+                               placeholder="Enter your password">
+                    </div>
+                </div>
+
+                <button type="submit" class="btn-primary w-full py-3.5 rounded-xl text-sm mt-2">
+                    Sign In
+                </button>
+
+                <div class="text-center mt-3">
+                    <a href="{{ url_for('forgot_password') }}" class="text-xs text-gray-400 hover:text-[#9B72AF] transition hover:underline">
+                        Forgot your password?
+                    </a>
+                </div>
+            </form>
+
+            <p class="text-center text-sm text-gray-500 mt-6">
+                Don't have an account? 
+                <a href="{{ url_for('signup') }}" class="text-[#9B72AF] font-semibold hover:underline">Create one</a>
+            </p>
+        </div>
+    </div>
+</body>
+</html>

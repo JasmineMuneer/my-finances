@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-6">
+
+    <!-- Page header -->
+    <div class="flex justify-between items-center">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-800">Daily View</h1>
+            <p class="text-sm text-gray-400 mt-0.5">Your money day by day for {{ current_month }}</p>
+        </div>
+        <form method="GET" class="flex gap-2">
+            <input type="month" name="month" value="{{ current_month }}"
+                   class="px-3 py-2 bg-white border border-[#CDB4DB]/40 rounded-xl text-sm font-medium text-gray-700 shadow-sm outline-none focus:border-[#CDB4DB]"
+                   onchange="this.form.submit()">
+        </form>
+    </div>
+
+    {% if days %}
+        <div class="space-y-6">
+            {% for day in days %}
+            <div class="card p-0 overflow-hidden">
+                <!-- Day Header -->
+                <div class="bg-[#FDFCFF] px-5 py-4 border-b border-[#CDB4DB]/20 flex justify-between items-center">
+                    <h3 class="font-bold text-gray-800 flex items-center gap-2">
+                        <i class="ph-fill ph-calendar-blank text-[#9B72AF]"></i>
+                        {{ day.date }}
+                    </h3>
+                    <div class="flex gap-4 text-sm font-semibold">
+                        {% if day.income > 0 %}
+                            <span class="text-green-600">+{{ currency }}{{ "{:,.2f}".format(day.income) }}</span>
+                        {% endif %}
+                        {% if day.expense > 0 %}
+                            <span class="text-gray-700">-{{ currency }}{{ "{:,.2f}".format(day.expense) }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Day Transactions -->
+                <div class="p-2 space-y-1">
+                    {% for txn in day.transactions %}
+                    <div class="flex items-center justify-between p-3 rounded-xl transition hover:bg-[#FFC8DD]/10">
+                        <div class="flex items-center gap-3">
+                            <div class="p-2.5 rounded-full text-sm"
+                                 style="background: {% if txn.type == 'expense' %}rgba(255,175,204,0.2){% else %}rgba(189,224,254,0.3){% endif %};
+                                        color: {% if txn.type == 'expense' %}#a03060{% else %}#2d7bbf{% endif %};">
+                                {% if txn.category in ['Food','Groceries'] %}<i class="ph-fill ph-hamburger"></i>
+                                {% elif txn.category == 'Shopping' %}<i class="ph-fill ph-shopping-bag"></i>
+                                {% elif txn.category == 'Transport' %}<i class="ph-fill ph-car"></i>
+                                {% elif txn.type == 'income' %}<i class="ph-fill ph-money"></i>
+                                {% else %}<i class="ph-fill ph-receipt"></i>{% endif %}
+                            </div>
+                            <div>
+                                <p class="font-semibold text-gray-800 text-sm">{{ txn.description or txn.category }}</p>
+                                <p class="text-xs text-gray-400">{{ txn.category }} {% if txn.payment_method %}· {{ txn.payment_method }}{% endif %}</p>
+                            </div>
+                        </div>
+                        <p class="font-bold text-sm {% if txn.type == 'expense' %}text-gray-700{% else %}text-green-600{% endif %}">
+                            {% if txn.type == 'expense' %}-{% else %}+{% endif %}{{ currency }}{{ "{:,.2f}".format(txn.amount) }}
+                        </p>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="card text-center py-16">
+            <i class="ph ph-calendar-x text-5xl mb-4" style="color: #CDB4DB;"></i>
+            <h3 class="text-xl font-bold text-gray-800">No activity</h3>
+            <p class="text-gray-500 mt-2">There are no transactions recorded in this month.</p>
+        </div>
+    {% endif %}
+
+</div>
+{% endblock %}

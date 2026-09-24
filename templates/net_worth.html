@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-6" x-data="{ addAssetOpen: false, addType: 'asset' }">
+
+    <div class="flex justify-between items-end">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-800">Net Worth</h1>
+            <p class="text-sm text-gray-400 mt-0.5">Assets minus liabilities — your true financial position.</p>
+        </div>
+        <div class="flex gap-2">
+            <button @click="addType='asset'; addAssetOpen=true"
+                    class="text-sm px-3 py-2 rounded-xl font-medium transition flex items-center gap-1.5"
+                    style="background:rgba(74,222,128,0.12);color:#166534;">
+                <i class="ph ph-plus"></i> Asset
+            </button>
+            <button @click="addType='liability'; addAssetOpen=true"
+                    class="text-sm px-3 py-2 rounded-xl font-medium transition flex items-center gap-1.5"
+                    style="background:rgba(248,113,113,0.12);color:#c0445e;">
+                <i class="ph ph-plus"></i> Liability
+            </button>
+        </div>
+    </div>
+
+    <!-- Net Worth Hero -->
+    <div class="card text-center py-10 relative overflow-hidden"
+         style="background: linear-gradient(135deg, rgba(189,224,254,0.15) 0%, rgba(205,180,219,0.15) 100%); border: 1px solid rgba(205,180,219,0.25);">
+        <p class="text-xs font-bold uppercase tracking-widest text-gray-400 mb-2">Total Net Worth</p>
+        <h2 class="text-5xl font-black" style="color: {% if net >= 0 %}#166534{% else %}#c0445e{% endif %};">
+            {{ currency }}{{ "{:,.0f}".format(net|abs) }}
+        </h2>
+        {% if net < 0 %}<p class="text-sm mt-2 font-medium" style="color:#c0445e;">(negative — liabilities exceed assets)</p>{% endif %}
+        <div class="flex justify-center gap-10 mt-6 text-sm">
+            <div class="text-center">
+                <p class="text-gray-400 text-xs uppercase tracking-wider font-semibold mb-1">Assets</p>
+                <p class="font-bold text-lg" style="color:#2d8a4e;">{{ currency }}{{ "{:,.0f}".format(total_assets) }}</p>
+            </div>
+            <div class="border-l border-gray-200 pl-10 text-center">
+                <p class="text-gray-400 text-xs uppercase tracking-wider font-semibold mb-1">Liabilities</p>
+                <p class="font-bold text-lg" style="color:#c0445e;">{{ currency }}{{ "{:,.0f}".format(total_liabilities) }}</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <!-- Assets -->
+        <div class="card">
+            <h3 class="font-semibold text-gray-700 mb-4 flex items-center gap-2">
+                <i class="ph ph-trend-up" style="color:#4ADE80;"></i> Assets
+            </h3>
+            {% if assets %}
+            <div class="space-y-3">
+                {% for a in assets %}
+                <div class="flex justify-between items-center p-3 rounded-xl"
+                     style="background:rgba(74,222,128,0.08); border:1px solid rgba(74,222,128,0.2);">
+                    <span class="text-sm font-medium text-gray-700">{{ a.name }}</span>
+                    <div class="flex items-center gap-3">
+                        <span class="font-bold text-sm" style="color:#2d8a4e;">{{ currency }}{{ "{:,.0f}".format(a.value) }}</span>
+                        <form action="{{ url_for('delete_net_worth', name=a.name) }}" method="POST" onsubmit="return confirm('Remove?');">
+                            <button type="submit" class="text-gray-300 hover:text-red-400 text-sm"><i class="ph ph-x"></i></button>
+                        </form>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-sm text-gray-400 text-center py-6">No assets added yet</p>
+            {% endif %}
+        </div>
+
+        <!-- Liabilities -->
+        <div class="card">
+            <h3 class="font-semibold text-gray-700 mb-4 flex items-center gap-2">
+                <i class="ph ph-trend-down" style="color:#F87171;"></i> Liabilities
+            </h3>
+            {% if liabilities %}
+            <div class="space-y-3">
+                {% for l in liabilities %}
+                <div class="flex justify-between items-center p-3 rounded-xl"
+                     style="background:rgba(248,113,113,0.08); border:1px solid rgba(248,113,113,0.2);">
+                    <span class="text-sm font-medium text-gray-700">{{ l.name }}</span>
+                    <div class="flex items-center gap-3">
+                        <span class="font-bold text-sm" style="color:#c0445e;">{{ currency }}{{ "{:,.0f}".format(l.value) }}</span>
+                        <form action="{{ url_for('delete_net_worth', name=l.name) }}" method="POST" onsubmit="return confirm('Remove?');">
+                            <button type="submit" class="text-gray-300 hover:text-red-400 text-sm"><i class="ph ph-x"></i></button>
+                        </form>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-sm text-gray-400 text-center py-6">No liabilities added yet</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Add Modal -->
+    <div x-show="addAssetOpen" class="fixed inset-0 z-50 overflow-y-auto" style="display:none;">
+        <div class="flex items-center justify-center min-h-screen p-4">
+            <div x-show="addAssetOpen" class="fixed inset-0 bg-black/25 backdrop-blur-sm" @click="addAssetOpen=false"></div>
+            <div x-show="addAssetOpen" class="relative bg-white rounded-2xl shadow-xl w-full max-w-md p-6"
+                 style="border:1px solid rgba(205,180,219,0.3);">
+                <form action="{{ url_for('net_worth') }}" method="POST">
+                    <input type="hidden" name="type" :value="addType">
+                    <h3 class="text-xl font-semibold text-gray-800 mb-4" x-text="addType === 'asset' ? 'Add Asset' : 'Add Liability'"></h3>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-600 mb-1">Name</label>
+                            <input type="text" name="name" required
+                                   class="block w-full border border-[#CDB4DB]/40 rounded-xl py-3 px-3 bg-[#FDFCFF] text-sm"
+                                   placeholder="e.g. Bank Savings, Car Loan">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-600 mb-1">Value</label>
+                            <div class="relative">
+                                <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                    <span class="text-gray-400">{{ currency }}</span>
+                                </div>
+                                <input type="number" step="1" name="value" required
+                                       class="block w-full pl-9 pr-4 py-3 bg-[#FDFCFF] border border-[#CDB4DB]/40 rounded-xl text-sm"
+                                       placeholder="0">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex gap-3 mt-6">
+                        <button type="submit" class="btn-primary flex-1 py-3 rounded-xl text-sm">Save</button>
+                        <button type="button" @click="addAssetOpen=false"
+                                class="flex-1 py-3 rounded-xl text-sm font-semibold"
+                                style="background:rgba(205,180,219,0.15);color:#6b4f7a;">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
