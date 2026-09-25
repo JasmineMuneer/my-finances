@@ -109,19 +109,32 @@ To enable AI summaries on the dashboard:
   [System.Environment]::SetEnvironmentVariable("GEMINI_API_KEY", "your_api_key", "User")
   ```
 
-### 2. Password Reset Emails (SMTP)
+### 3. Password Reset Emails (Brevo SMTP)
 
-To allow the app to actually send password reset emails (e.g., using Gmail):
+To allow the app to send password reset emails, it uses [Brevo](https://www.brevo.com/) (formerly Sendinblue) SMTP.
 
-* Generate an "App Password" in your Google Account security settings.
-* Set the following variables:
+* Create a free account at Brevo.com.
+* Navigate to **Settings → SMTP & API → SMTP** to get your credentials.
+* Add and verify your sender email address in Brevo under **Senders & Domains**.
+* Set the following variables in your Render Environment (or locally):
 
   ```powershell
-  [System.Environment]::SetEnvironmentVariable("SMTP_USER", "your-email@gmail.com", "User")
-  [System.Environment]::SetEnvironmentVariable("SMTP_PASS", "your-app-password", "User")
+  [System.Environment]::SetEnvironmentVariable("SMTP_HOST", "smtp-relay.brevo.com", "User")
+  [System.Environment]::SetEnvironmentVariable("SMTP_PORT", "2525", "User")
+  [System.Environment]::SetEnvironmentVariable("SMTP_USER", "your-brevo-login@email.com", "User")
+  [System.Environment]::SetEnvironmentVariable("SMTP_PASS", "your-brevo-smtp-key", "User")
+  [System.Environment]::SetEnvironmentVariable("SMTP_USE_TLS", "true", "User")
+  [System.Environment]::SetEnvironmentVariable("MAIL_FROM", "noreply@yourdomain.com", "User")
+  [System.Environment]::SetEnvironmentVariable("APP_BASE_URL", "https://your-app-name.onrender.com", "User")
   ```
 
-*(Note: If SMTP is not configured, the app will safely print the password reset link directly on the screen for local testing).*
+* **`SMTP_USER`**: Your Brevo account login email.
+* **`SMTP_PASS`**: Your Brevo **SMTP Key** (found in Settings → SMTP & API, NOT your account password).
+* **`MAIL_FROM`**: Must be an address you have verified as a sender in your Brevo account.
+* **`SMTP_PORT`**: Use `2525`. This port works on Render Free (ports 25, 465, and 587 are blocked).
+* **`APP_BASE_URL`**: Your deployed Render URL. Do not include a trailing slash.
+
+*(Note: If Brevo SMTP is not configured, the app will safely print the password reset link directly on the screen for local testing.)*
 
 ---
 

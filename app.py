@@ -8,10 +8,10 @@ import io
 import csv as csv_module
 import os
 import secrets
-import smtplib
 import json
 import urllib.request
 import urllib.error
+import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
@@ -24,14 +24,14 @@ app.secret_key = 'my-finances-super-secret-key-123'
 # Set as an environment variable OR paste directly between the quotes.
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 
-# ── Email / SMTP configuration for password reset ──────────────────────────
-# For Gmail: generate an App Password at https://myaccount.google.com/apppasswords
-# Set environment variables OR paste the values directly below.
-SMTP_HOST = os.environ.get("SMTP_HOST", "smtp.gmail.com")
-SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
-SMTP_USER = os.environ.get("SMTP_USER", "")   # your Gmail address
-SMTP_PASS = os.environ.get("SMTP_PASS", "")   # your Gmail App Password
-SMTP_FROM = os.environ.get("SMTP_FROM", SMTP_USER)
+# ── Email / Brevo SMTP configuration for password reset ─────────────────────
+SMTP_HOST    = os.environ.get("SMTP_HOST", "smtp-relay.brevo.com")
+SMTP_PORT    = int(os.environ.get("SMTP_PORT", "2525"))
+SMTP_USER    = os.environ.get("SMTP_USER", "")
+SMTP_PASS    = os.environ.get("SMTP_PASS", "")
+SMTP_USE_TLS = os.environ.get("SMTP_USE_TLS", "true").lower() == "true"
+MAIL_FROM    = os.environ.get("MAIL_FROM", "")
+APP_BASE_URL = os.environ.get("APP_BASE_URL", "http://127.0.0.1:5000").rstrip('/')
 
 # Initialize DB on startup
 init_db()
@@ -106,11 +106,12 @@ def logout():
 # ── Password Reset ───────────────────────────────────────────────────────────
 
 def send_reset_email(to_email, reset_link):
-    """Send a password reset email via SMTP."""
-    msg = MIMEMultipart('alternative')
-    msg['Subject'] = 'My Finances \u2014 Password Reset Request'
-    msg['From']    = f'My Finances <{SMTP_FROM}>'
-    msg['To']      = to_email
+    """Send a password reset email via Brevo SMTP."""
+    if not SMTP_USER or not SMTP_PASS:
+        raise RuntimeError("Brevo SMTP credentials (SMTP_USER / SMTP_PASS) are not configured")
+    if not MAIL_FROM:
+        raise RuntimeError("MAIL_FROM is not configured")
+
     text_body = f"""Hi,
 
 You requested a password reset for your My Finances account.
@@ -130,12 +131,19 @@ If you did not request this, you can safely ignore this email.
         </a>
         <p style="color:#aaa;font-size:12px;">This link expires in <strong>1 hour</strong>. If you did not request a reset, ignore this email.</p>
     </div>"""
+
+    msg = MIMEMultipart('alternative')
+    msg['Subject'] = 'My Finances \u2014 Password Reset Request'
+    msg['From']    = f'My Finances <{MAIL_FROM}>'
+    msg['To']      = to_email
     msg.attach(MIMEText(text_body, 'plain'))
     msg.attach(MIMEText(html_body, 'html'))
+
     with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
-        server.starttls()
+        if SMTP_USE_TLS:
+            server.starttls()
         server.login(SMTP_USER, SMTP_PASS)
-        server.sendmail(SMTP_FROM, to_email, msg.as_string())
+        server.sendmail(MAIL_FROM, to_email, msg.as_string())
 
 @app.route('/forgot-password', methods=['GET', 'POST'])
 def forgot_password():
@@ -152,16 +160,15 @@ def forgot_password():
             conn.execute("INSERT INTO password_reset_tokens (user_id, token, expires_at) VALUES (%s, %s, %s)", (user['id'], token, expires))
             conn.commit()
             conn.close()
-            reset_link = url_for('reset_password', token=token, _external=True)
+            reset_link = f"{APP_BASE_URL}/reset-password/{token}"
             try:
-                if not SMTP_USER or not SMTP_PASS:
-                    raise RuntimeError("SMTP not configured")
                 send_reset_email(email, reset_link)
                 msg = "A password reset link has been sent to your email address. Please check your inbox."
                 msg_type = 'success'
             except Exception as e:
+                print(f"--- BREVO SMTP ERROR ---: {type(e).__name__}: {e}")
                 # Fallback: show the link directly (useful when SMTP is not set up)
-                msg = f"Email sending failed (Error: {e}). Use this link to reset your password: {reset_link}"
+                msg = f"Email sending failed (check server logs). Use this link to reset your password: {reset_link}"
                 msg_type = 'warning'
         else:
             conn.close()
