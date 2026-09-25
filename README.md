@@ -44,7 +44,7 @@ My Finances is a comprehensive, multi-user personal finance management web appli
 ## 🛠️ Tech Stack
 
 * **Backend:** Python, Flask
-* **Database:** SQLite3 (Serverless, stored locally in `finances.db`)
+* **Database:** PostgreSQL (requires `DATABASE_URL` environment variable)
 * **Frontend:** HTML5, Jinja2 Templates
 * **Styling:** Tailwind CSS (via CDN)
 * **Reactivity:** Alpine.js (Lightweight JavaScript framework)
@@ -84,7 +84,21 @@ My Finances is a comprehensive, multi-user personal finance management web appli
 
 The application uses environment variables for external services. If these are not set, the app will gracefully fall back to local/offline alternatives.
 
-### 1. AI Financial Insights (Google Gemini)
+### 1. PostgreSQL Database (Required)
+
+To run the application, you must provide a valid PostgreSQL connection string. 
+
+**For Render Deployment:**
+1. Create a "PostgreSQL" service on Render.
+2. In your Flask Web Service, add an environment variable `DATABASE_URL` and set its value to your PostgreSQL Internal Database URL (e.g. `postgresql://user:pass@host/dbname`).
+3. The app will automatically create all necessary tables upon starting up. No manual migration is needed.
+
+**For Local Development:**
+```powershell
+[System.Environment]::SetEnvironmentVariable("DATABASE_URL", "postgresql://postgres:password@localhost:5432/myfinances", "User")
+```
+
+### 2. AI Financial Insights (Google Gemini)
 
 To enable AI summaries on the dashboard:
 
@@ -116,9 +130,9 @@ To allow the app to actually send password reset emails (e.g., using Gmail):
 ```text
 📁 My Finances/
 ├── 📄 app.py               # Main Flask application and routes
-├── 📄 database.py          # SQLite database connection and auto-migrations
-├── 📄 schema.sql           # Database table definitions
-├── 📄 requirements.txt     # Python dependencies
+├── 📄 database.py          # PostgreSQL connection wrapper and auto-init
+├── 📄 schema.pg.sql        # PostgreSQL table definitions
+├── 📄 requirements.txt     # Python dependencies (psycopg2-binary, flask, etc)
 ├── 📄 run.bat              # Windows startup script
 └── 📁 templates/           # HTML templates (Jinja2)
     ├── base.html           # Main layout & sidebar navigation

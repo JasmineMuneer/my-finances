@@ -3,7 +3,7 @@ from flask import Flask, render_template, request, redirect, url_for, jsonify, m
 from werkzeug.security import generate_password_hash, check_password_hash
 from database import init_db, get_db_connection, get_setting, set_setting
 from datetime import datetime, timedelta
-import sqlite3
+import psycopg2
 import io
 import csv as csv_module
 import os
@@ -59,7 +59,7 @@ def login():
         username = request.form['username']
         password = request.form['password']
         conn = get_db_connection()
-        user = conn.execute('SELECT * FROM users WHERE username = ?', (username,)).fetchone()
+        user = conn.execute('SELECT * FROM users WHERE username = %s', (username,)).fetchone()
         conn.close()
         if user and check_password_hash(user['password'], password):
             session['user_id'] = user['id']
@@ -76,21 +76,21 @@ def signup():
         password = request.form['password']
         email    = request.form.get('email', '').strip().lower()
         conn = get_db_connection()
-        existing = conn.execute('SELECT id FROM users WHERE username = ?', (username,)).fetchone()
+        existing = conn.execute('SELECT id FROM users WHERE username = %s', (username,)).fetchone()
         if existing:
             conn.close()
             flash('Username already exists')
             return redirect(url_for('signup'))
         hashed = generate_password_hash(password)
-        cursor = conn.execute('INSERT INTO users (username, password, email) VALUES (?, ?, ?)', (username, hashed, email))
-        user_id = cursor.lastrowid
-        conn.execute('INSERT INTO settings (user_id, key, value) VALUES (?, ?, ?)', (user_id, 'currency', '\u20b9'))
+        cursor = conn.execute('INSERT INTO users (username, password, email) VALUES (%s, %s, %s) RETURNING id', (username, hashed, email))
+        user_id = cursor.fetchone()['id']
+        conn.execute('INSERT INTO settings (user_id, key, value) VALUES (%s, %s, %s)', (user_id, 'currency', '\u20b9'))
         default_expenses = ['Food', 'Groceries', 'Shopping', 'Transport', 'Housing', 'Utilities', 'Entertainment', 'Healthcare', 'Other']
         default_incomes  = ['Salary', 'Freelance', 'Investment', 'Other Income']
         for cat in default_expenses:
-            conn.execute("INSERT INTO categories (user_id, name, type) VALUES (?, ?, 'expense')", (user_id, cat))
+            conn.execute("INSERT INTO categories (user_id, name, type) VALUES (%s, %s, 'expense')", (user_id, cat))
         for cat in default_incomes:
-            conn.execute("INSERT INTO categories (user_id, name, type) VALUES (?, ?, 'income')", (user_id, cat))
+            conn.execute("INSERT INTO categories (user_id, name, type) VALUES (%s, %s, 'income')", (user_id, cat))
         conn.commit()
         conn.close()
         session['user_id'] = user_id
@@ -144,12 +144,12 @@ def forgot_password():
     if request.method == 'POST':
         email = request.form.get('email', '').strip().lower()
         conn = get_db_connection()
-        user = conn.execute("SELECT * FROM users WHERE LOWER(email)=?", (email,)).fetchone()
+        user = conn.execute("SELECT * FROM users WHERE LOWER(email)=%s", (email,)).fetchone()
         if user:
             token = secrets.token_urlsafe(32)
             expires = (datetime.now() + timedelta(hours=1)).strftime('%Y-%m-%d %H:%M:%S')
-            conn.execute("DELETE FROM password_reset_tokens WHERE user_id=?", (user['id'],))
-            conn.execute("INSERT INTO password_reset_tokens (user_id, token, expires_at) VALUES (?, ?, ?)", (user['id'], token, expires))
+            conn.execute("DELETE FROM password_reset_tokens WHERE user_id=%s", (user['id'],))
+            conn.execute("INSERT INTO password_reset_tokens (user_id, token, expires_at) VALUES (%s, %s, %s)", (user['id'], token, expires))
             conn.commit()
             conn.close()
             reset_link = url_for('reset_password', token=token, _external=True)
@@ -175,7 +175,7 @@ def reset_password(token):
     conn = get_db_connection()
     now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     record = conn.execute(
-        "SELECT * FROM password_reset_tokens WHERE token=? AND expires_at > ?", (token, now)
+        "SELECT * FROM password_reset_tokens WHERE token=%s AND expires_at > %s", (token, now)
     ).fetchone()
     if not record:
         conn.close()
@@ -190,8 +190,8 @@ def reset_password(token):
             conn.close()
             return render_template('reset_password.html', token=token, invalid=False, error="Passwords do not match.")
         hashed = generate_password_hash(password)
-        conn.execute("UPDATE users SET password=? WHERE id=?", (hashed, record['user_id']))
-        conn.execute("DELETE FROM password_reset_tokens WHERE token=?", (token,))
+        conn.execute("UPDATE users SET password=%s WHERE id=%s", (hashed, record['user_id']))
+        conn.execute("DELETE FROM password_reset_tokens WHERE token=%s", (token,))
         conn.commit()
         conn.close()
         flash('Your password has been reset. Please log in.')
@@ -207,8 +207,8 @@ def inject_globals():
         user_id = session['user_id']
         conn = get_db_connection()
         currency = get_setting(user_id, 'currency', '\u20b9')
-        expense_cats = conn.execute("SELECT name FROM categories WHERE user_id=? AND type='expense' ORDER BY name", (user_id,)).fetchall()
-        income_cats  = conn.execute("SELECT name FROM categories WHERE user_id=? AND type='income' ORDER BY name",  (user_id,)).fetchall()
+        expense_cats = conn.execute("SELECT name FROM categories WHERE user_id=%s AND type='expense' ORDER BY name", (user_id,)).fetchall()
+        income_cats  = conn.execute("SELECT name FROM categories WHERE user_id=%s AND type='income' ORDER BY name",  (user_id,)).fetchall()
         conn.close()
         return dict(
             currency=currency,
@@ -229,20 +229,20 @@ def dashboard():
     conn = get_db_connection()
     current_month = get_current_month()
     user_id = session['user_id']
-    income    = conn.execute("SELECT SUM(amount) as t FROM transactions WHERE user_id=? AND type='income' AND strftime('%Y-%m', date)=?", (user_id, current_month)).fetchone()['t'] or 0
-    expenses  = conn.execute("SELECT SUM(amount) as t FROM transactions WHERE user_id=? AND type='expense' AND strftime('%Y-%m', date)=?", (user_id, current_month)).fetchone()['t'] or 0
+    income    = conn.execute("SELECT SUM(amount) as t FROM transactions WHERE user_id=%s AND type='income' AND substring(date from 1 for 7)=%s", (user_id, current_month)).fetchone()['t'] or 0
+    expenses  = conn.execute("SELECT SUM(amount) as t FROM transactions WHERE user_id=%s AND type='expense' AND substring(date from 1 for 7)=%s", (user_id, current_month)).fetchone()['t'] or 0
     savings   = income - expenses
     savings_rate = (savings / income * 100) if income > 0 else 0
-    recent_transactions = conn.execute("SELECT * FROM transactions WHERE user_id=? ORDER BY date DESC, id DESC LIMIT 5", (user_id,)).fetchall()
+    recent_transactions = conn.execute("SELECT * FROM transactions WHERE user_id=%s ORDER BY date DESC, id DESC LIMIT 5", (user_id,)).fetchall()
     top_categories = conn.execute("""
         SELECT category, SUM(amount) as total FROM transactions
-        WHERE user_id=? AND type='expense' AND strftime('%Y-%m', date)=?
+        WHERE user_id=%s AND type='expense' AND substring(date from 1 for 7)=%s
         GROUP BY category ORDER BY total DESC LIMIT 3
     """, (user_id, current_month)).fetchall()
-    goals = conn.execute("SELECT * FROM goals WHERE user_id=?", (user_id,)).fetchall()
+    goals = conn.execute("SELECT * FROM goals WHERE user_id=%s", (user_id,)).fetchall()
     today = datetime.now().day
-    upcoming_bills = conn.execute("SELECT * FROM bills WHERE user_id=? AND is_active=1 AND due_day>=? ORDER BY due_day ASC LIMIT 3", (user_id, today)).fetchall()
-    upcoming_emis  = conn.execute("SELECT * FROM loans WHERE user_id=? AND remaining_installments>0 AND due_day>=? ORDER BY due_day ASC LIMIT 3", (user_id, today)).fetchall()
+    upcoming_bills = conn.execute("SELECT * FROM bills WHERE user_id=%s AND is_active=1 AND due_day>=%s ORDER BY due_day ASC LIMIT 3", (user_id, today)).fetchall()
+    upcoming_emis  = conn.execute("SELECT * FROM loans WHERE user_id=%s AND remaining_installments>0 AND due_day>=%s ORDER BY due_day ASC LIMIT 3", (user_id, today)).fetchall()
     money_score = calculate_money_score(conn, user_id)
     conn.close()
     return render_template('dashboard.html',
@@ -254,8 +254,8 @@ def dashboard():
 def calculate_money_score(conn, user_id):
     """Compute the 0–1000 Money Score for the current month."""
     current_month = get_current_month()
-    income   = conn.execute("SELECT SUM(amount) as t FROM transactions WHERE user_id=? AND type='income' AND strftime('%Y-%m', date)=?", (user_id, current_month)).fetchone()['t'] or 0
-    expenses = conn.execute("SELECT SUM(amount) as t FROM transactions WHERE user_id=? AND type='expense' AND strftime('%Y-%m', date)=?", (user_id, current_month)).fetchone()['t'] or 0
+    income   = conn.execute("SELECT SUM(amount) as t FROM transactions WHERE user_id=%s AND type='income' AND substring(date from 1 for 7)=%s", (user_id, current_month)).fetchone()['t'] or 0
+    expenses = conn.execute("SELECT SUM(amount) as t FROM transactions WHERE user_id=%s AND type='expense' AND substring(date from 1 for 7)=%s", (user_id, current_month)).fetchone()['t'] or 0
 
     # 1. Savings score (max 300)
     if income == 0:
@@ -265,13 +265,13 @@ def calculate_money_score(conn, user_id):
         savings_score = min(300, int(savings_rate * 1200))
 
     # 2. Budget score (max 250)
-    budgets = conn.execute("SELECT * FROM budgets WHERE user_id=? AND month=?", (user_id, current_month)).fetchall()
+    budgets = conn.execute("SELECT * FROM budgets WHERE user_id=%s AND month=%s", (user_id, current_month)).fetchall()
     if not budgets:
         budget_score = 250
     else:
         budget_score = 250
         for b in budgets:
-            spent = conn.execute("SELECT SUM(amount) as t FROM transactions WHERE user_id=? AND type='expense' AND category=? AND strftime('%Y-%m', date)=?", (user_id, b['category'], current_month)).fetchone()['t'] or 0
+            spent = conn.execute("SELECT SUM(amount) as t FROM transactions WHERE user_id=%s AND type='expense' AND category=%s AND substring(date from 1 for 7)=%s", (user_id, b['category'], current_month)).fetchone()['t'] or 0
             if b['amount'] > 0:
                 if spent > b['amount']:
                     budget_score -= 60
@@ -283,7 +283,7 @@ def calculate_money_score(conn, user_id):
     emi_score = 200
 
     # 4. Goals score (max 250)
-    goals = conn.execute("SELECT * FROM goals WHERE user_id=?", (user_id,)).fetchall()
+    goals = conn.execute("SELECT * FROM goals WHERE user_id=%s", (user_id,)).fetchall()
     if not goals:
         goals_score = 250
     else:
@@ -301,13 +301,13 @@ def transactions():
     type_filter  = request.args.get('type', 'all')
     q = request.args.get('q', '').strip()
     user_id = session['user_id']
-    query  = "SELECT * FROM transactions WHERE user_id=? AND strftime('%Y-%m', date)=?"
+    query  = "SELECT * FROM transactions WHERE user_id=%s AND substring(date from 1 for 7)=%s"
     params = [user_id, month_filter]
     if type_filter in ['income', 'expense']:
-        query += " AND type=?"
+        query += " AND type=%s"
         params.append(type_filter)
     if q:
-        query += " AND (description LIKE ? OR notes LIKE ? OR category LIKE ?)"
+        query += " AND (description LIKE %s OR notes LIKE %s OR category LIKE %s)"
         params.extend([f'%{q}%', f'%{q}%', f'%{q}%'])
     query += " ORDER BY date DESC, id DESC"
     transactions_list = conn.execute(query, params).fetchall()
@@ -328,7 +328,7 @@ def add_transaction():
     conn = get_db_connection()
     conn.execute('''
         INSERT INTO transactions (user_id, amount, type, category, date, payment_method, description, notes)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
     ''', (user_id, amount, txn_type, category, date, payment_method, description, notes))
     conn.commit()
     conn.close()
@@ -338,7 +338,7 @@ def add_transaction():
 def delete_transaction(id):
     conn = get_db_connection()
     user_id = session['user_id']
-    conn.execute('DELETE FROM transactions WHERE id=? AND user_id=?', (id, user_id))
+    conn.execute('DELETE FROM transactions WHERE id=%s AND user_id=%s', (id, user_id))
     conn.commit()
     conn.close()
     return redirect(request.referrer or url_for('transactions'))
@@ -347,7 +347,7 @@ def delete_transaction(id):
 def edit_transaction(id):
     conn = get_db_connection()
     user_id = session['user_id']
-    txn = conn.execute("SELECT * FROM transactions WHERE id=? AND user_id=?", (id, user_id)).fetchone()
+    txn = conn.execute("SELECT * FROM transactions WHERE id=%s AND user_id=%s", (id, user_id)).fetchone()
     if not txn:
         conn.close()
         return redirect(url_for('transactions'))
@@ -361,8 +361,8 @@ def edit_transaction(id):
         notes          = request.form.get('notes', '')
         conn.execute('''
             UPDATE transactions
-            SET amount=?, type=?, category=?, date=?, payment_method=?, description=?, notes=?
-            WHERE id=? AND user_id=?
+            SET amount=%s, type=%s, category=%s, date=%s, payment_method=%s, description=%s, notes=%s
+            WHERE id=%s AND user_id=%s
         ''', (amount, txn_type, category, date, payment_method, description, notes, id, user_id))
         conn.commit()
         conn.close()
@@ -381,10 +381,10 @@ def analytics_data():
     conn = get_db_connection()
     current_month = request.args.get('month', get_current_month())
     user_id = session['user_id']
-    expenses = conn.execute("SELECT category, SUM(amount) as total FROM transactions WHERE user_id=? AND type='expense' AND strftime('%Y-%m', date)=? GROUP BY category", (user_id, current_month)).fetchall()
+    expenses = conn.execute("SELECT category, SUM(amount) as total FROM transactions WHERE user_id=%s AND type='expense' AND substring(date from 1 for 7)=%s GROUP BY category", (user_id, current_month)).fetchall()
     trend    = conn.execute("""
-        SELECT strftime('%Y-%m', date) as month, type, SUM(amount) as total
-        FROM transactions WHERE user_id=? AND date >= date('now', '-6 months')
+        SELECT substring(date from 1 for 7) as month, type, SUM(amount) as total
+        FROM transactions WHERE user_id=%s AND date::date >= CURRENT_DATE - INTERVAL '6 months'
         GROUP BY month, type ORDER BY month ASC
     """, (user_id,)).fetchall()
     conn.close()
@@ -403,21 +403,21 @@ def budgets():
     if request.method == 'POST':
         category = request.form['category']
         amount   = float(request.form['amount'])
-        existing = conn.execute("SELECT id FROM budgets WHERE user_id=? AND category=? AND month=?", (user_id, category, current_month)).fetchone()
+        existing = conn.execute("SELECT id FROM budgets WHERE user_id=%s AND category=%s AND month=%s", (user_id, category, current_month)).fetchone()
         if existing:
-            conn.execute("UPDATE budgets SET amount=? WHERE id=?", (amount, existing['id']))
+            conn.execute("UPDATE budgets SET amount=%s WHERE id=%s", (amount, existing['id']))
         else:
-            conn.execute("INSERT INTO budgets (user_id, category, amount, month) VALUES (?, ?, ?, ?)", (user_id, category, amount, current_month))
+            conn.execute("INSERT INTO budgets (user_id, category, amount, month) VALUES (%s, %s, %s, %s)", (user_id, category, amount, current_month))
         conn.commit()
         return redirect(url_for('budgets'))
-    budgets_list = conn.execute("SELECT * FROM budgets WHERE user_id=? AND month=?", (user_id, current_month)).fetchall()
+    budgets_list = conn.execute("SELECT * FROM budgets WHERE user_id=%s AND month=%s", (user_id, current_month)).fetchall()
     budget_data = []
     for b in budgets_list:
         cat = b['category']
         if cat == 'Overall':
-            spent = conn.execute("SELECT SUM(amount) as t FROM transactions WHERE user_id=? AND type='expense' AND strftime('%Y-%m', date)=?", (user_id, current_month)).fetchone()['t'] or 0
+            spent = conn.execute("SELECT SUM(amount) as t FROM transactions WHERE user_id=%s AND type='expense' AND substring(date from 1 for 7)=%s", (user_id, current_month)).fetchone()['t'] or 0
         else:
-            spent = conn.execute("SELECT SUM(amount) as t FROM transactions WHERE user_id=? AND type='expense' AND category=? AND strftime('%Y-%m', date)=?", (user_id, cat, current_month)).fetchone()['t'] or 0
+            spent = conn.execute("SELECT SUM(amount) as t FROM transactions WHERE user_id=%s AND type='expense' AND category=%s AND substring(date from 1 for 7)=%s", (user_id, cat, current_month)).fetchone()['t'] or 0
         budget_data.append({
             'id': b['id'], 'category': cat, 'amount': b['amount'],
             'spent': spent, 'remaining': b['amount'] - spent,
@@ -431,7 +431,7 @@ def budgets():
 def delete_budget(id):
     conn = get_db_connection()
     user_id = session['user_id']
-    conn.execute("DELETE FROM budgets WHERE id=? AND user_id=?", (id, user_id))
+    conn.execute("DELETE FROM budgets WHERE id=%s AND user_id=%s", (id, user_id))
     conn.commit()
     conn.close()
     return redirect(url_for('budgets'))
@@ -449,11 +449,11 @@ def goals():
         monthly_contribution = float(request.form.get('monthly_contribution', 0))
         conn.execute('''
             INSERT INTO goals (user_id, name, target_amount, current_amount, target_date, monthly_contribution)
-            VALUES (?, ?, ?, 0, ?, ?)
+            VALUES (%s, %s, %s, 0, %s, %s)
         ''', (user_id, name, target_amount, target_date, monthly_contribution))
         conn.commit()
         return redirect(url_for('goals'))
-    goals_list = conn.execute("SELECT * FROM goals WHERE user_id=? ORDER BY id DESC", (user_id,)).fetchall()
+    goals_list = conn.execute("SELECT * FROM goals WHERE user_id=%s ORDER BY id DESC", (user_id,)).fetchall()
     goals_data = []
     for g in goals_list:
         progress = (g['current_amount'] / g['target_amount'] * 100) if g['target_amount'] > 0 else 0
@@ -471,7 +471,7 @@ def update_goal(id):
     added_amount = float(request.form['added_amount'])
     conn = get_db_connection()
     user_id = session['user_id']
-    conn.execute("UPDATE goals SET current_amount = current_amount + ? WHERE id=? AND user_id=?", (added_amount, id, user_id))
+    conn.execute("UPDATE goals SET current_amount = current_amount + %s WHERE id=%s AND user_id=%s", (added_amount, id, user_id))
     conn.commit()
     conn.close()
     return redirect(url_for('goals'))
@@ -480,7 +480,7 @@ def update_goal(id):
 def delete_goal(id):
     conn = get_db_connection()
     user_id = session['user_id']
-    conn.execute("DELETE FROM goals WHERE id=? AND user_id=?", (id, user_id))
+    conn.execute("DELETE FROM goals WHERE id=%s AND user_id=%s", (id, user_id))
     conn.commit()
     conn.close()
     return redirect(url_for('goals'))
@@ -501,11 +501,11 @@ def loans():
         due_day            = int(request.form.get('due_day', 1))
         conn.execute('''
             INSERT INTO loans (user_id, name, lender, principal, interest_rate, monthly_emi, total_installments, remaining_installments, due_day)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
         ''', (user_id, name, lender, principal, interest_rate, monthly_emi, total_installments, total_installments, due_day))
         conn.commit()
         return redirect(url_for('loans'))
-    loans_list = conn.execute("SELECT * FROM loans WHERE user_id=? ORDER BY id DESC", (user_id,)).fetchall()
+    loans_list = conn.execute("SELECT * FROM loans WHERE user_id=%s ORDER BY id DESC", (user_id,)).fetchall()
     total_outstanding = sum(
         l['principal'] * (l['remaining_installments'] / l['total_installments'])
         if l['total_installments'] > 0 else 0
@@ -519,14 +519,14 @@ def loans():
 def pay_emi(id):
     conn = get_db_connection()
     user_id = session['user_id']
-    loan = conn.execute("SELECT * FROM loans WHERE id=? AND user_id=?", (id, user_id)).fetchone()
+    loan = conn.execute("SELECT * FROM loans WHERE id=%s AND user_id=%s", (id, user_id)).fetchone()
     if loan and loan['remaining_installments'] > 0:
         conn.execute('''
             INSERT INTO transactions (user_id, amount, type, category, date, description, notes)
-            VALUES (?, ?, 'expense', 'EMI', ?, ?, ?)
+            VALUES (%s, %s, 'expense', 'EMI', %s, %s, %s)
         ''', (user_id, loan['monthly_emi'], datetime.now().strftime('%Y-%m-%d'),
               f"EMI Payment: {loan['name']}", "Auto-generated from EMI Tracker"))
-        conn.execute("UPDATE loans SET remaining_installments = remaining_installments - 1 WHERE id=?", (id,))
+        conn.execute("UPDATE loans SET remaining_installments = remaining_installments - 1 WHERE id=%s", (id,))
         conn.commit()
     conn.close()
     return redirect(url_for('loans'))
@@ -535,7 +535,7 @@ def pay_emi(id):
 def delete_loan(id):
     conn = get_db_connection()
     user_id = session['user_id']
-    conn.execute("DELETE FROM loans WHERE id=? AND user_id=?", (id, user_id))
+    conn.execute("DELETE FROM loans WHERE id=%s AND user_id=%s", (id, user_id))
     conn.commit()
     conn.close()
     return redirect(url_for('loans'))
@@ -554,11 +554,11 @@ def bills():
         category  = request.form.get('category', 'Utilities')
         conn.execute('''
             INSERT INTO bills (user_id, name, amount, frequency, due_day, category)
-            VALUES (?, ?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s, %s)
         ''', (user_id, name, amount, frequency, due_day, category))
         conn.commit()
         return redirect(url_for('bills'))
-    bills_list   = conn.execute("SELECT * FROM bills WHERE user_id=? ORDER BY due_day ASC", (user_id,)).fetchall()
+    bills_list   = conn.execute("SELECT * FROM bills WHERE user_id=%s ORDER BY due_day ASC", (user_id,)).fetchall()
     monthly_cost = sum(b['amount'] for b in bills_list if b['frequency'] == 'monthly' and b['is_active'])
     yearly_cost  = sum(b['amount'] for b in bills_list if b['frequency'] == 'yearly'  and b['is_active']) + (monthly_cost * 12)
     conn.close()
@@ -568,9 +568,9 @@ def bills():
 def toggle_bill(id):
     conn = get_db_connection()
     user_id = session['user_id']
-    bill = conn.execute("SELECT is_active FROM bills WHERE id=? AND user_id=?", (id, user_id)).fetchone()
+    bill = conn.execute("SELECT is_active FROM bills WHERE id=%s AND user_id=%s", (id, user_id)).fetchone()
     if bill:
-        conn.execute("UPDATE bills SET is_active=? WHERE id=?", (0 if bill['is_active'] else 1, id))
+        conn.execute("UPDATE bills SET is_active=%s WHERE id=%s", (0 if bill['is_active'] else 1, id))
         conn.commit()
     conn.close()
     return redirect(url_for('bills'))
@@ -579,11 +579,11 @@ def toggle_bill(id):
 def pay_bill(id):
     conn = get_db_connection()
     user_id = session['user_id']
-    bill = conn.execute("SELECT * FROM bills WHERE id=? AND user_id=?", (id, user_id)).fetchone()
+    bill = conn.execute("SELECT * FROM bills WHERE id=%s AND user_id=%s", (id, user_id)).fetchone()
     if bill:
         conn.execute('''
             INSERT INTO transactions (user_id, amount, type, category, date, description, notes)
-            VALUES (?, ?, 'expense', ?, ?, ?, ?)
+            VALUES (%s, %s, 'expense', %s, %s, %s, %s)
         ''', (user_id, bill['amount'], bill['category'], datetime.now().strftime('%Y-%m-%d'),
               f"Bill Payment: {bill['name']}", "Auto-generated from Bills Tracker"))
         conn.commit()
@@ -594,7 +594,7 @@ def pay_bill(id):
 def delete_bill(id):
     conn = get_db_connection()
     user_id = session['user_id']
-    conn.execute("DELETE FROM bills WHERE id=? AND user_id=?", (id, user_id))
+    conn.execute("DELETE FROM bills WHERE id=%s AND user_id=%s", (id, user_id))
     conn.commit()
     conn.close()
     return redirect(url_for('bills'))
@@ -607,8 +607,8 @@ def score():
     current_month = get_current_month()
     user_id = session['user_id']
 
-    income   = conn.execute("SELECT SUM(amount) as t FROM transactions WHERE user_id=? AND type='income' AND strftime('%Y-%m', date)=?", (user_id, current_month)).fetchone()['t'] or 0
-    expenses = conn.execute("SELECT SUM(amount) as t FROM transactions WHERE user_id=? AND type='expense' AND strftime('%Y-%m', date)=?", (user_id, current_month)).fetchone()['t'] or 0
+    income   = conn.execute("SELECT SUM(amount) as t FROM transactions WHERE user_id=%s AND type='income' AND substring(date from 1 for 7)=%s", (user_id, current_month)).fetchone()['t'] or 0
+    expenses = conn.execute("SELECT SUM(amount) as t FROM transactions WHERE user_id=%s AND type='expense' AND substring(date from 1 for 7)=%s", (user_id, current_month)).fetchone()['t'] or 0
 
     # Savings score (max 300)
     if income == 0:
@@ -618,13 +618,13 @@ def score():
         savings_score = min(300, int(savings_rate * 1200))
 
     # Budget score (max 250)
-    budgets_list = conn.execute("SELECT * FROM budgets WHERE user_id=? AND month=?", (user_id, current_month)).fetchall()
+    budgets_list = conn.execute("SELECT * FROM budgets WHERE user_id=%s AND month=%s", (user_id, current_month)).fetchall()
     if not budgets_list:
         budget_score = 250
     else:
         budget_score = 250
         for b in budgets_list:
-            spent = conn.execute("SELECT SUM(amount) as t FROM transactions WHERE user_id=? AND type='expense' AND category=? AND strftime('%Y-%m', date)=?", (user_id, b['category'], current_month)).fetchone()['t'] or 0
+            spent = conn.execute("SELECT SUM(amount) as t FROM transactions WHERE user_id=%s AND type='expense' AND category=%s AND substring(date from 1 for 7)=%s", (user_id, b['category'], current_month)).fetchone()['t'] or 0
             if b['amount'] > 0:
                 if spent > b['amount']:
                     budget_score -= 60
@@ -636,7 +636,7 @@ def score():
     emi_score = 200
 
     # Goals score (max 250)
-    goals_list = conn.execute("SELECT * FROM goals WHERE user_id=?", (user_id,)).fetchall()
+    goals_list = conn.execute("SELECT * FROM goals WHERE user_id=%s", (user_id,)).fetchall()
     if not goals_list:
         goals_score = 250
     else:
@@ -671,11 +671,11 @@ def net_worth():
         item_type     = request.form['type']
         value         = float(request.form['value'])
         date_recorded = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        conn.execute("INSERT INTO assets_liabilities (user_id, name, type, value, date_recorded) VALUES (?, ?, ?, ?, ?)",
+        conn.execute("INSERT INTO assets_liabilities (user_id, name, type, value, date_recorded) VALUES (%s, %s, %s, %s, %s)",
                      (user_id, name, item_type, value, date_recorded))
         conn.commit()
         return redirect(url_for('net_worth'))
-    items = conn.execute("SELECT * FROM assets_liabilities WHERE user_id=? ORDER BY date_recorded DESC", (user_id,)).fetchall()
+    items = conn.execute("SELECT * FROM assets_liabilities WHERE user_id=%s ORDER BY date_recorded DESC", (user_id,)).fetchall()
     latest_items = {}
     for item in items:
         if item['name'] not in latest_items:
@@ -693,7 +693,7 @@ def net_worth():
 def delete_net_worth(name):
     conn = get_db_connection()
     user_id = session['user_id']
-    conn.execute("DELETE FROM assets_liabilities WHERE name=? AND user_id=?", (name, user_id))
+    conn.execute("DELETE FROM assets_liabilities WHERE name=%s AND user_id=%s", (name, user_id))
     conn.commit()
     conn.close()
     return redirect(url_for('net_worth'))
@@ -709,18 +709,18 @@ def affordability():
         category = request.form.get('category', 'Overall')
         conn = get_db_connection()
         current_month = get_current_month()
-        income   = conn.execute("SELECT SUM(amount) as t FROM transactions WHERE user_id=? AND type='income' AND strftime('%Y-%m', date)=?", (user_id, current_month)).fetchone()['t'] or 0
-        expenses = conn.execute("SELECT SUM(amount) as t FROM transactions WHERE user_id=? AND type='expense' AND strftime('%Y-%m', date)=?", (user_id, current_month)).fetchone()['t'] or 0
+        income   = conn.execute("SELECT SUM(amount) as t FROM transactions WHERE user_id=%s AND type='income' AND substring(date from 1 for 7)=%s", (user_id, current_month)).fetchone()['t'] or 0
+        expenses = conn.execute("SELECT SUM(amount) as t FROM transactions WHERE user_id=%s AND type='expense' AND substring(date from 1 for 7)=%s", (user_id, current_month)).fetchone()['t'] or 0
         today = datetime.now().day
-        upcoming_bills = conn.execute("SELECT SUM(amount) as t FROM bills WHERE user_id=? AND is_active=1 AND due_day>=?", (user_id, today)).fetchone()['t'] or 0
-        upcoming_emis  = conn.execute("SELECT SUM(monthly_emi) as t FROM loans WHERE user_id=? AND remaining_installments>0 AND due_day>=?", (user_id, today)).fetchone()['t'] or 0
+        upcoming_bills = conn.execute("SELECT SUM(amount) as t FROM bills WHERE user_id=%s AND is_active=1 AND due_day>=%s", (user_id, today)).fetchone()['t'] or 0
+        upcoming_emis  = conn.execute("SELECT SUM(monthly_emi) as t FROM loans WHERE user_id=%s AND remaining_installments>0 AND due_day>=%s", (user_id, today)).fetchone()['t'] or 0
         available_money     = income - expenses
         projected_remaining = available_money - (upcoming_bills + upcoming_emis) - amount
         budget_status = "No specific budget set."
         if category != 'Overall':
-            budget = conn.execute("SELECT amount FROM budgets WHERE user_id=? AND category=? AND month=?", (user_id, category, current_month)).fetchone()
+            budget = conn.execute("SELECT amount FROM budgets WHERE user_id=%s AND category=%s AND month=%s", (user_id, category, current_month)).fetchone()
             if budget:
-                spent = conn.execute("SELECT SUM(amount) as t FROM transactions WHERE user_id=? AND type='expense' AND category=? AND strftime('%Y-%m', date)=?", (user_id, category, current_month)).fetchone()['t'] or 0
+                spent = conn.execute("SELECT SUM(amount) as t FROM transactions WHERE user_id=%s AND type='expense' AND category=%s AND substring(date from 1 for 7)=%s", (user_id, category, current_month)).fetchone()['t'] or 0
                 remaining = budget['amount'] - spent
                 if amount > remaining:
                     budget_status = f"Warning: This exceeds your {category} budget by {amount - remaining:,.2f}."
@@ -761,13 +761,13 @@ def get_alerts():
     prev_month = (datetime.now().replace(day=1) - timedelta(days=1)).strftime('%Y-%m')
 
     # 1. Budget exceeded
-    budgets_list = conn.execute("SELECT * FROM budgets WHERE user_id=? AND month=?", (user_id, current_month)).fetchall()
+    budgets_list = conn.execute("SELECT * FROM budgets WHERE user_id=%s AND month=%s", (user_id, current_month)).fetchall()
     for b in budgets_list:
         cat = b['category']
         if cat == 'Overall':
-            spent = conn.execute("SELECT SUM(amount) as t FROM transactions WHERE user_id=? AND type='expense' AND strftime('%Y-%m',date)=?", (user_id, current_month)).fetchone()['t'] or 0
+            spent = conn.execute("SELECT SUM(amount) as t FROM transactions WHERE user_id=%s AND type='expense' AND substring(date from 1 for 7)=%s", (user_id, current_month)).fetchone()['t'] or 0
         else:
-            spent = conn.execute("SELECT SUM(amount) as t FROM transactions WHERE user_id=? AND type='expense' AND category=? AND strftime('%Y-%m',date)=?", (user_id, cat, current_month)).fetchone()['t'] or 0
+            spent = conn.execute("SELECT SUM(amount) as t FROM transactions WHERE user_id=%s AND type='expense' AND category=%s AND substring(date from 1 for 7)=%s", (user_id, cat, current_month)).fetchone()['t'] or 0
         if b['amount'] > 0:
             pct = spent / b['amount'] * 100
             if pct > 100:
@@ -776,16 +776,16 @@ def get_alerts():
                 alerts.append({'type': 'warning', 'icon': 'warning-circle', 'msg': f'Your {cat} budget is {pct:.0f}% used \u2014 only {currency}{b["amount"] - spent:,.0f} left.'})
 
     # 2. Category spending vs last month
-    cats = conn.execute("SELECT category, SUM(amount) as t FROM transactions WHERE user_id=? AND type='expense' AND strftime('%Y-%m',date)=? GROUP BY category", (user_id, current_month)).fetchall()
+    cats = conn.execute("SELECT category, SUM(amount) as t FROM transactions WHERE user_id=%s AND type='expense' AND substring(date from 1 for 7)=%s GROUP BY category", (user_id, current_month)).fetchall()
     for c in cats:
-        prev = conn.execute("SELECT SUM(amount) as t FROM transactions WHERE user_id=? AND type='expense' AND category=? AND strftime('%Y-%m',date)=?", (user_id, c['category'], prev_month)).fetchone()['t'] or 0
+        prev = conn.execute("SELECT SUM(amount) as t FROM transactions WHERE user_id=%s AND type='expense' AND category=%s AND substring(date from 1 for 7)=%s", (user_id, c['category'], prev_month)).fetchone()['t'] or 0
         if prev > 0:
             change_pct = (c['t'] - prev) / prev * 100
             if change_pct > 25:
                 alerts.append({'type': 'warning', 'icon': 'trend-up', 'msg': f'Your {c["category"]} spending is {change_pct:.0f}% higher than last month.'})
 
     # 3. Upcoming bills (within 7 days)
-    bills_list = conn.execute("SELECT * FROM bills WHERE user_id=? AND is_active=1 AND due_day>=?", (user_id, today)).fetchall()
+    bills_list = conn.execute("SELECT * FROM bills WHERE user_id=%s AND is_active=1 AND due_day>=%s", (user_id, today)).fetchall()
     for b in bills_list:
         days_left = b['due_day'] - today
         if days_left <= 7:
@@ -797,7 +797,7 @@ def get_alerts():
                 alerts.append({'type': 'warning', 'icon': 'lightning', 'msg': f'Your {b["name"]} bill ({currency}{b["amount"]:,.0f}) is due in {days_left} days.'})
 
     # 4. Upcoming EMIs
-    loans_list = conn.execute("SELECT * FROM loans WHERE user_id=? AND remaining_installments>0 AND due_day>=?", (user_id, today)).fetchall()
+    loans_list = conn.execute("SELECT * FROM loans WHERE user_id=%s AND remaining_installments>0 AND due_day>=%s", (user_id, today)).fetchall()
     for loan in loans_list:
         days_left = loan['due_day'] - today
         if days_left <= 7:
@@ -809,24 +809,24 @@ def get_alerts():
                 alerts.append({'type': 'info',   'icon': 'bank', 'msg': f'EMI for {loan["name"]} ({currency}{loan["monthly_emi"]:,.0f}) is due in {days_left} days.'})
 
     # 5. Savings improvement alert
-    income      = conn.execute("SELECT SUM(amount) as t FROM transactions WHERE user_id=? AND type='income' AND strftime('%Y-%m',date)=?", (user_id, current_month)).fetchone()['t'] or 0
-    expenses    = conn.execute("SELECT SUM(amount) as t FROM transactions WHERE user_id=? AND type='expense' AND strftime('%Y-%m',date)=?", (user_id, current_month)).fetchone()['t'] or 0
-    prev_income = conn.execute("SELECT SUM(amount) as t FROM transactions WHERE user_id=? AND type='income' AND strftime('%Y-%m',date)=?", (user_id, prev_month)).fetchone()['t'] or 0
-    prev_exp    = conn.execute("SELECT SUM(amount) as t FROM transactions WHERE user_id=? AND type='expense' AND strftime('%Y-%m',date)=?", (user_id, prev_month)).fetchone()['t'] or 0
+    income      = conn.execute("SELECT SUM(amount) as t FROM transactions WHERE user_id=%s AND type='income' AND substring(date from 1 for 7)=%s", (user_id, current_month)).fetchone()['t'] or 0
+    expenses    = conn.execute("SELECT SUM(amount) as t FROM transactions WHERE user_id=%s AND type='expense' AND substring(date from 1 for 7)=%s", (user_id, current_month)).fetchone()['t'] or 0
+    prev_income = conn.execute("SELECT SUM(amount) as t FROM transactions WHERE user_id=%s AND type='income' AND substring(date from 1 for 7)=%s", (user_id, prev_month)).fetchone()['t'] or 0
+    prev_exp    = conn.execute("SELECT SUM(amount) as t FROM transactions WHERE user_id=%s AND type='expense' AND substring(date from 1 for 7)=%s", (user_id, prev_month)).fetchone()['t'] or 0
     curr_savings = income - expenses
     prev_savings = prev_income - prev_exp
     if curr_savings > prev_savings and prev_savings >= 0:
         alerts.append({'type': 'success', 'icon': 'trend-up', 'msg': f'You saved {currency}{curr_savings - prev_savings:,.0f} more this month than last month. Great work!'})
 
     # 6. Goals near completion
-    goals_list = conn.execute("SELECT * FROM goals WHERE user_id=? AND target_amount>0", (user_id,)).fetchall()
+    goals_list = conn.execute("SELECT * FROM goals WHERE user_id=%s AND target_amount>0", (user_id,)).fetchall()
     for g in goals_list:
         pct = g['current_amount'] / g['target_amount'] * 100
         if 90 <= pct < 100:
             alerts.append({'type': 'success', 'icon': 'flag', 'msg': f'You are close to reaching your "{g["name"]}" goal \u2014 {pct:.0f}% complete!'})
 
     # 7. Total subscription cost info
-    sub_total = conn.execute("SELECT SUM(amount) as t FROM bills WHERE user_id=? AND is_active=1 AND frequency='monthly'", (user_id,)).fetchone()['t'] or 0
+    sub_total = conn.execute("SELECT SUM(amount) as t FROM bills WHERE user_id=%s AND is_active=1 AND frequency='monthly'", (user_id,)).fetchone()['t'] or 0
     if sub_total > 0:
         alerts.append({'type': 'info', 'icon': 'credit-card', 'msg': f'Your recurring monthly bills total {currency}{sub_total:,.0f}.'})
 
@@ -882,18 +882,18 @@ def financial_insights():
     today    = datetime.now().day
     currency = get_setting(user_id, 'currency', '\u20b9')
 
-    income   = conn.execute("SELECT SUM(amount) as t FROM transactions WHERE user_id=? AND type='income' AND strftime('%Y-%m', date)=?", (user_id, current_month)).fetchone()['t'] or 0
-    expenses = conn.execute("SELECT SUM(amount) as t FROM transactions WHERE user_id=? AND type='expense' AND strftime('%Y-%m', date)=?", (user_id, current_month)).fetchone()['t'] or 0
+    income   = conn.execute("SELECT SUM(amount) as t FROM transactions WHERE user_id=%s AND type='income' AND substring(date from 1 for 7)=%s", (user_id, current_month)).fetchone()['t'] or 0
+    expenses = conn.execute("SELECT SUM(amount) as t FROM transactions WHERE user_id=%s AND type='expense' AND substring(date from 1 for 7)=%s", (user_id, current_month)).fetchone()['t'] or 0
     savings  = income - expenses
 
-    cats = conn.execute("SELECT category, SUM(amount) as t FROM transactions WHERE user_id=? AND type='expense' AND strftime('%Y-%m', date)=? GROUP BY category ORDER BY t DESC LIMIT 5", (user_id, current_month)).fetchall()
+    cats = conn.execute("SELECT category, SUM(amount) as t FROM transactions WHERE user_id=%s AND type='expense' AND substring(date from 1 for 7)=%s GROUP BY category ORDER BY t DESC LIMIT 5", (user_id, current_month)).fetchall()
     top_categories = {c['category']: c['t'] for c in cats}
 
-    budgets_list = conn.execute("SELECT category, amount FROM budgets WHERE user_id=? AND month=?", (user_id, current_month)).fetchall()
+    budgets_list = conn.execute("SELECT category, amount FROM budgets WHERE user_id=%s AND month=%s", (user_id, current_month)).fetchall()
     budgets      = {b['category']: b['amount'] for b in budgets_list}
 
-    emis      = conn.execute("SELECT SUM(monthly_emi) as t FROM loans WHERE user_id=? AND remaining_installments>0 AND due_day>=?", (user_id, today)).fetchone()['t'] or 0
-    bills_due = conn.execute("SELECT SUM(amount) as t FROM bills WHERE user_id=? AND is_active=1 AND due_day>=?", (user_id, today)).fetchone()['t'] or 0
+    emis      = conn.execute("SELECT SUM(monthly_emi) as t FROM loans WHERE user_id=%s AND remaining_installments>0 AND due_day>=%s", (user_id, today)).fetchone()['t'] or 0
+    bills_due = conn.execute("SELECT SUM(amount) as t FROM bills WHERE user_id=%s AND is_active=1 AND due_day>=%s", (user_id, today)).fetchone()['t'] or 0
     upcoming_obligations = emis + bills_due
     conn.close()
 
@@ -936,7 +936,7 @@ def export_csv():
     """Export all transactions as a UTF-8 CSV file."""
     conn = get_db_connection()
     user_id = session['user_id']
-    rows = conn.execute("SELECT date, type, category, amount, payment_method, description, notes FROM transactions WHERE user_id=? ORDER BY date DESC", (user_id,)).fetchall()
+    rows = conn.execute("SELECT date, type, category, amount, payment_method, description, notes FROM transactions WHERE user_id=%s ORDER BY date DESC", (user_id,)).fetchall()
     conn.close()
     output = io.StringIO()
     writer = csv_module.writer(output)
@@ -956,7 +956,7 @@ def export_json():
     user_id = session['user_id']
     data = {}
     for table in ['transactions', 'budgets', 'goals', 'loans', 'bills', 'assets_liabilities', 'categories']:
-        rows = conn.execute(f"SELECT * FROM {table} WHERE user_id=?", (user_id,)).fetchall()
+        rows = conn.execute(f"SELECT * FROM {table} WHERE user_id=%s", (user_id,)).fetchall()
         data[table] = [dict(row) for row in rows]
     conn.close()
     response = make_response(json.dumps(data, indent=2))
@@ -975,7 +975,7 @@ def settings():
         action = request.form.get('action')
         if action == 'clear_all':
             for table in ['transactions', 'budgets', 'goals', 'loans', 'bills', 'assets_liabilities']:
-                conn.execute(f"DELETE FROM {table} WHERE user_id=?", (user_id,))
+                conn.execute(f"DELETE FROM {table} WHERE user_id=%s", (user_id,))
             conn.commit()
             msg = 'All data has been cleared.'
         elif action == 'save_preferences':
@@ -988,30 +988,30 @@ def settings():
             email    = request.form.get('email', '').strip().lower()
             if username:
                 try:
-                    conn.execute("UPDATE users SET username=? WHERE id=?", (username, user_id))
+                    conn.execute("UPDATE users SET username=%s WHERE id=%s", (username, user_id))
                     session['username'] = username
                     msg = 'Profile updated.'
-                except sqlite3.IntegrityError:
+                except psycopg2.IntegrityError:
                     msg = 'Username already exists.'
             if email:
-                conn.execute("UPDATE users SET email=? WHERE id=?", (email, user_id))
+                conn.execute("UPDATE users SET email=%s WHERE id=%s", (email, user_id))
                 if not msg:
                     msg = 'Profile updated.'
             if password:
                 hashed = generate_password_hash(password)
-                conn.execute("UPDATE users SET password=? WHERE id=?", (hashed, user_id))
+                conn.execute("UPDATE users SET password=%s WHERE id=%s", (hashed, user_id))
                 msg = 'Profile and password updated.'
             conn.commit()
         elif action == 'add_category':
             name   = request.form.get('name', '').strip()
             c_type = request.form.get('type')
             if name and c_type:
-                conn.execute("INSERT INTO categories (user_id, name, type) VALUES (?, ?, ?)", (user_id, name, c_type))
+                conn.execute("INSERT INTO categories (user_id, name, type) VALUES (%s, %s, %s)", (user_id, name, c_type))
                 conn.commit()
                 msg = 'Category added.'
         elif action == 'delete_category':
             cat_id = request.form.get('category_id')
-            conn.execute("DELETE FROM categories WHERE id=? AND user_id=?", (cat_id, user_id))
+            conn.execute("DELETE FROM categories WHERE id=%s AND user_id=%s", (cat_id, user_id))
             conn.commit()
             msg = 'Category deleted.'
         elif action == 'import_json':
@@ -1024,16 +1024,16 @@ def settings():
                             for t in data['transactions']:
                                 conn.execute('''
                                     INSERT INTO transactions (user_id, amount, type, category, date, payment_method, description, notes)
-                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                                 ''', (user_id, t['amount'], t['type'], t['category'], t['date'],
                                       t.get('payment_method', ''), t.get('description', ''), t.get('notes', '')))
                             conn.commit()
                             msg = 'Data imported successfully.'
                     except Exception as e:
                         msg = f'Error importing data: {e}'
-    expense_cats = conn.execute("SELECT * FROM categories WHERE user_id=? AND type='expense' ORDER BY name", (user_id,)).fetchall()
-    income_cats  = conn.execute("SELECT * FROM categories WHERE user_id=? AND type='income' ORDER BY name",  (user_id,)).fetchall()
-    user_info    = conn.execute("SELECT username, email FROM users WHERE id=?", (user_id,)).fetchone()
+    expense_cats = conn.execute("SELECT * FROM categories WHERE user_id=%s AND type='expense' ORDER BY name", (user_id,)).fetchall()
+    income_cats  = conn.execute("SELECT * FROM categories WHERE user_id=%s AND type='income' ORDER BY name",  (user_id,)).fetchall()
+    user_info    = conn.execute("SELECT username, email FROM users WHERE id=%s", (user_id,)).fetchone()
     conn.close()
     return render_template('settings.html', msg=msg, expense_cats=expense_cats, income_cats=income_cats, user_info=user_info)
 
@@ -1044,22 +1044,22 @@ def reports():
     conn = get_db_connection()
     current_month = request.args.get('month', get_current_month())
     user_id = session['user_id']
-    income   = conn.execute("SELECT SUM(amount) as t FROM transactions WHERE user_id=? AND type='income' AND strftime('%Y-%m',date)=?", (user_id, current_month)).fetchone()['t'] or 0
-    expenses = conn.execute("SELECT SUM(amount) as t FROM transactions WHERE user_id=? AND type='expense' AND strftime('%Y-%m',date)=?", (user_id, current_month)).fetchone()['t'] or 0
+    income   = conn.execute("SELECT SUM(amount) as t FROM transactions WHERE user_id=%s AND type='income' AND substring(date from 1 for 7)=%s", (user_id, current_month)).fetchone()['t'] or 0
+    expenses = conn.execute("SELECT SUM(amount) as t FROM transactions WHERE user_id=%s AND type='expense' AND substring(date from 1 for 7)=%s", (user_id, current_month)).fetchone()['t'] or 0
     savings  = income - expenses
     savings_rate = (savings / income * 100) if income > 0 else 0
     top_categories = conn.execute("""
         SELECT category, SUM(amount) as total FROM transactions
-        WHERE user_id=? AND type='expense' AND strftime('%Y-%m',date)=?
+        WHERE user_id=%s AND type='expense' AND substring(date from 1 for 7)=%s
         GROUP BY category ORDER BY total DESC LIMIT 8
     """, (user_id, current_month)).fetchall()
-    budgets_list = conn.execute("SELECT * FROM budgets WHERE user_id=? AND month=?", (user_id, current_month)).fetchall()
+    budgets_list = conn.execute("SELECT * FROM budgets WHERE user_id=%s AND month=%s", (user_id, current_month)).fetchall()
     budget_data = []
     for b in budgets_list:
-        spent = conn.execute("SELECT SUM(amount) as t FROM transactions WHERE user_id=? AND type='expense' AND category=? AND strftime('%Y-%m',date)=?", (user_id, b['category'], current_month)).fetchone()['t'] or 0
+        spent = conn.execute("SELECT SUM(amount) as t FROM transactions WHERE user_id=%s AND type='expense' AND category=%s AND substring(date from 1 for 7)=%s", (user_id, b['category'], current_month)).fetchone()['t'] or 0
         budget_data.append({'category': b['category'], 'budget': b['amount'], 'spent': spent, 'over': spent > b['amount']})
-    goals_list = conn.execute("SELECT * FROM goals WHERE user_id=?", (user_id,)).fetchall()
-    loans_list = conn.execute("SELECT * FROM loans WHERE user_id=?", (user_id,)).fetchall()
+    goals_list = conn.execute("SELECT * FROM goals WHERE user_id=%s", (user_id,)).fetchall()
+    loans_list = conn.execute("SELECT * FROM loans WHERE user_id=%s", (user_id,)).fetchall()
     conn.close()
     return render_template('reports.html',
         income=income, expenses=expenses, savings=savings, savings_rate=savings_rate,
@@ -1074,18 +1074,18 @@ def comparison():
     user_id = session['user_id']
     current_month  = get_current_month()
     prev_month = (datetime.now().replace(day=1) - timedelta(days=1)).strftime('%Y-%m')
-    curr_inc = conn.execute("SELECT SUM(amount) as t FROM transactions WHERE user_id=? AND type='income' AND strftime('%Y-%m',date)=?", (user_id, current_month)).fetchone()['t'] or 0
-    curr_exp = conn.execute("SELECT SUM(amount) as t FROM transactions WHERE user_id=? AND type='expense' AND strftime('%Y-%m',date)=?", (user_id, current_month)).fetchone()['t'] or 0
-    prev_inc = conn.execute("SELECT SUM(amount) as t FROM transactions WHERE user_id=? AND type='income' AND strftime('%Y-%m',date)=?", (user_id, prev_month)).fetchone()['t'] or 0
-    prev_exp = conn.execute("SELECT SUM(amount) as t FROM transactions WHERE user_id=? AND type='expense' AND strftime('%Y-%m',date)=?", (user_id, prev_month)).fetchone()['t'] or 0
+    curr_inc = conn.execute("SELECT SUM(amount) as t FROM transactions WHERE user_id=%s AND type='income' AND substring(date from 1 for 7)=%s", (user_id, current_month)).fetchone()['t'] or 0
+    curr_exp = conn.execute("SELECT SUM(amount) as t FROM transactions WHERE user_id=%s AND type='expense' AND substring(date from 1 for 7)=%s", (user_id, current_month)).fetchone()['t'] or 0
+    prev_inc = conn.execute("SELECT SUM(amount) as t FROM transactions WHERE user_id=%s AND type='income' AND substring(date from 1 for 7)=%s", (user_id, prev_month)).fetchone()['t'] or 0
+    prev_exp = conn.execute("SELECT SUM(amount) as t FROM transactions WHERE user_id=%s AND type='expense' AND substring(date from 1 for 7)=%s", (user_id, prev_month)).fetchone()['t'] or 0
     curr_sav = curr_inc - curr_exp
     prev_sav = prev_inc - prev_exp
-    categories = conn.execute("SELECT DISTINCT category FROM transactions WHERE user_id=? AND type='expense' AND (strftime('%Y-%m',date)=? OR strftime('%Y-%m',date)=?)", (user_id, current_month, prev_month)).fetchall()
+    categories = conn.execute("SELECT DISTINCT category FROM transactions WHERE user_id=%s AND type='expense' AND (substring(date from 1 for 7)=%s OR substring(date from 1 for 7)=%s)", (user_id, current_month, prev_month)).fetchall()
     cat_data = []
     for c in categories:
         cat   = c['category']
-        c_amt = conn.execute("SELECT SUM(amount) as t FROM transactions WHERE user_id=? AND type='expense' AND category=? AND strftime('%Y-%m',date)=?", (user_id, cat, current_month)).fetchone()['t'] or 0
-        p_amt = conn.execute("SELECT SUM(amount) as t FROM transactions WHERE user_id=? AND type='expense' AND category=? AND strftime('%Y-%m',date)=?", (user_id, cat, prev_month)).fetchone()['t'] or 0
+        c_amt = conn.execute("SELECT SUM(amount) as t FROM transactions WHERE user_id=%s AND type='expense' AND category=%s AND substring(date from 1 for 7)=%s", (user_id, cat, current_month)).fetchone()['t'] or 0
+        p_amt = conn.execute("SELECT SUM(amount) as t FROM transactions WHERE user_id=%s AND type='expense' AND category=%s AND substring(date from 1 for 7)=%s", (user_id, cat, prev_month)).fetchone()['t'] or 0
         if c_amt > 0 or p_amt > 0:
             cat_data.append({'category': cat, 'current': c_amt, 'previous': p_amt, 'diff': c_amt - p_amt})
     cat_data.sort(key=lambda x: x['current'], reverse=True)
@@ -1108,12 +1108,12 @@ def daily():
                SUM(CASE WHEN type='income' THEN amount ELSE 0 END) as income,
                SUM(CASE WHEN type='expense' THEN amount ELSE 0 END) as expense
         FROM transactions
-        WHERE user_id=? AND strftime('%Y-%m', date)=?
+        WHERE user_id=%s AND substring(date from 1 for 7)=%s
         GROUP BY date ORDER BY date DESC
     """, (user_id, current_month)).fetchall()
     days = []
     for d in daily_data:
-        txns = conn.execute("SELECT * FROM transactions WHERE user_id=? AND date=? ORDER BY id DESC", (user_id, d['date'])).fetchall()
+        txns = conn.execute("SELECT * FROM transactions WHERE user_id=%s AND date=%s ORDER BY id DESC", (user_id, d['date'])).fetchall()
         days.append({'date': d['date'], 'income': d['income'], 'expense': d['expense'], 'transactions': txns})
     conn.close()
     return render_template('daily.html', days=days, current_month=current_month)
