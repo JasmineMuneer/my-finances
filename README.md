@@ -13,6 +13,12 @@ My Finances is a comprehensive, multi-user personal finance management web appli
 
 ---
 
+## 🎞️ An Overview
+
+https://github.com/user-attachments/assets/9eb92986-7ee2-42a4-9fb5-be905c0a57da
+
+---
+
 ## 🚀 Features
 
 ### 📊 Core Tracking
