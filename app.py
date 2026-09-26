@@ -14,8 +14,21 @@ import urllib.error
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from decimal import Decimal
+from flask.json.provider import DefaultJSONProvider
+
+class _SafeJSONProvider(DefaultJSONProvider):
+    """Extend Flask's JSON serializer to handle Decimal and date types."""
+    def default(self, obj):
+        if isinstance(obj, Decimal):
+            return float(obj)
+        if hasattr(obj, 'isoformat'):   # date / datetime
+            return obj.isoformat()
+        return super().default(obj)
 
 app = Flask(__name__)
+app.json_provider_class = _SafeJSONProvider
+app.json = _SafeJSONProvider(app)
 app.config['JSON_AS_ASCII'] = False
 app.secret_key = 'my-finances-super-secret-key-123'
 
@@ -294,8 +307,12 @@ def calculate_money_score(conn, user_id):
     if not goals:
         goals_score = 250
     else:
-        progress_avg = sum([min(1.0, g['current_amount'] / g['target_amount']) for g in goals if g['target_amount'] > 0]) / len(goals)
-        goals_score = int(progress_avg * 250)
+        valid_goals = [g for g in goals if g['target_amount'] > 0]
+        if not valid_goals:
+            goals_score = 250
+        else:
+            progress_avg = sum(min(1.0, g['current_amount'] / g['target_amount']) for g in valid_goals) / len(valid_goals)
+            goals_score = int(progress_avg * 250)
 
     return min(1000, savings_score + budget_score + emi_score + goals_score)
 
@@ -314,7 +331,7 @@ def transactions():
         query += " AND type=%s"
         params.append(type_filter)
     if q:
-        query += " AND (description LIKE %s OR notes LIKE %s OR category LIKE %s)"
+        query += " AND (description ILIKE %s OR notes ILIKE %s OR category ILIKE %s)"
         params.extend([f'%{q}%', f'%{q}%', f'%{q}%'])
     query += " ORDER BY date DESC, id DESC"
     transactions_list = conn.execute(query, params).fetchall()
@@ -416,6 +433,7 @@ def budgets():
         else:
             conn.execute("INSERT INTO budgets (user_id, category, amount, month) VALUES (%s, %s, %s, %s)", (user_id, category, amount, current_month))
         conn.commit()
+        conn.close()
         return redirect(url_for('budgets'))
     budgets_list = conn.execute("SELECT * FROM budgets WHERE user_id=%s AND month=%s", (user_id, current_month)).fetchall()
     budget_data = []
@@ -459,6 +477,7 @@ def goals():
             VALUES (%s, %s, %s, 0, %s, %s)
         ''', (user_id, name, target_amount, target_date, monthly_contribution))
         conn.commit()
+        conn.close()
         return redirect(url_for('goals'))
     goals_list = conn.execute("SELECT * FROM goals WHERE user_id=%s ORDER BY id DESC", (user_id,)).fetchall()
     goals_data = []
@@ -647,8 +666,12 @@ def score():
     if not goals_list:
         goals_score = 250
     else:
-        progress_avg = sum(min(1.0, g['current_amount'] / g['target_amount']) for g in goals_list if g['target_amount'] > 0) / len(goals_list)
-        goals_score = int(progress_avg * 250)
+        valid_goals = [g for g in goals_list if g['target_amount'] > 0]
+        if not valid_goals:
+            goals_score = 250
+        else:
+            progress_avg = sum(min(1.0, g['current_amount'] / g['target_amount']) for g in valid_goals) / len(valid_goals)
+            goals_score = int(progress_avg * 250)
 
     total_score = min(1000, savings_score + budget_score + emi_score + goals_score)
 
@@ -966,7 +989,9 @@ def export_json():
         rows = conn.execute(f"SELECT * FROM {table} WHERE user_id=%s", (user_id,)).fetchall()
         data[table] = [dict(row) for row in rows]
     conn.close()
-    response = make_response(json.dumps(data, indent=2))
+    import flask
+    json_str = flask.current_app.json.dumps(data, indent=2)
+    response = make_response(json_str)
     response.headers['Content-Type'] = 'application/json'
     response.headers['Content-Disposition'] = 'attachment; filename=my_finances_backup.json'
     return response

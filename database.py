@@ -1,6 +1,18 @@
 import os
 import psycopg2
+import psycopg2.extensions
 from psycopg2.extras import DictCursor
+
+# ── Fix: PostgreSQL NUMERIC → Python float ───────────────────────────────────
+# By default psycopg2 returns Decimal for NUMERIC columns. Python 3 cannot
+# mix float literals and Decimal in comparisons or arithmetic (TypeError).
+# This registers a global converter so all NUMERIC values come back as float.
+_DEC2FLOAT = psycopg2.extensions.new_type(
+    psycopg2.extensions.DECIMAL.values,
+    'DEC2FLOAT',
+    lambda value, curs: float(value) if value is not None else None
+)
+psycopg2.extensions.register_type(_DEC2FLOAT)
 
 SCHEMA_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'schema.pg.sql')
 
@@ -40,7 +52,12 @@ def init_db():
     conn = get_db_connection()
     try:
         with open(SCHEMA_PATH, 'r', encoding='utf-8') as f:
-            conn.execute(f.read())
+            sql = f.read()
+        # Execute each statement individually — psycopg2 does not support
+        # multiple statements in a single cursor.execute() call reliably.
+        statements = [s.strip() for s in sql.split(';') if s.strip()]
+        for stmt in statements:
+            conn.execute(stmt)
         
         # Populate default categories for any user that doesn't have any
         users = conn.execute("SELECT id FROM users").fetchall()
